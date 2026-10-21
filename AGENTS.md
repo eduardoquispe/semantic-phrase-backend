@@ -2,7 +2,11 @@
 
 ## Project Structure & Module Organization
 
-This directory is a NestJS backend. Application code lives in `src/`: `main.ts` starts the server, `app.module.ts` wires dependencies, and the controller and service handle the starter route. Keep new modules, controllers, and services in `src/`, grouped by feature as the API grows. Unit tests sit beside source files as `*.spec.ts`; HTTP end-to-end tests live in `test/` as `*.e2e-spec.ts`. Build output goes to `dist/`, and coverage reports go to `coverage/`; neither belongs in commits.
+This directory is the NestJS 11 backend. It currently contains the starter `GET /` route: `src/main.ts` starts the server, `src/app.module.ts` composes dependencies, and `src/app.controller.ts` delegates to `src/app.service.ts`.
+
+Place new capabilities under `src/modules/<capability>/` and compose them in `app.module.ts`. Follow `.agents/skills/backend-architecture/SKILL.md` for layer and file placement; consult `.specify/memory/constitution.md` for project principles.
+
+Unit tests sit beside source files as `*.spec.ts`; HTTP end-to-end tests live in `test/` as `*.e2e-spec.ts`. Build output goes to `dist/`, and coverage reports go to `coverage/`; neither belongs in commits.
 
 ## Build, Test, and Development Commands
 
@@ -22,11 +26,15 @@ Write TypeScript with two-space indentation. Follow the repository's Prettier se
 
 ## Testing Guidelines
 
-Jest and `ts-jest` run tests in Node. Add a nearby `*.spec.ts` for service or controller behavior and a `test/*.e2e-spec.ts` for routes or request behavior. Run both test suites for API changes. `pnpm run test:cov` generates a report; no coverage threshold is configured, so review coverage for the code you change.
+Jest and `ts-jest` run tests in Node. Add nearby `*.spec.ts` tests for changed behavior and `test/*.e2e-spec.ts` tests for new or changed HTTP behavior. Run `pnpm run build`, `pnpm test`, and `pnpm run test:e2e` for API changes. `pnpm run test:cov` generates a report; no coverage threshold is configured, so review coverage for the code you change.
 
 ## Commit & Pull Request Guidelines
 
-Git history currently contains only `Initial commit`, so no established commit-message format is evident. Use a short, imperative subject that describes the change. In pull requests, explain the behavior changed, note commands run, and link a relevant issue when one exists. Include request and response examples for API changes; screenshots are useful only for changes with visible output.
+Use a short, imperative commit subject that describes the change. In pull requests, explain the behavior changed, note commands run, and link a relevant issue when one exists. Include request and response examples for API contract changes; screenshots are useful only for changes with visible output.
+
+## Feature Specifications
+
+Spec Kit files live in `.specify/`, with related skills in `.agents/skills/`. For specification-driven work, use the relevant skill and keep the feature's spec, plan, and tasks aligned with `.specify/memory/constitution.md`. Define inputs, outputs, and error behavior for API routes, and document compatibility changes before implementation.
 
 ## Configuration & Secrets
 
