@@ -63,3 +63,33 @@ describe('PhraseText', () => {
     }
   });
 });
+
+describe('PhraseText.forValidation', () => {
+  it.each(['!!!', '😀'.repeat(280), ' a ', '¡ÁRBOL!  Cusco.'])(
+    'preserves admissible original',
+    (value) => {
+      expect(PhraseText.forValidation(value).value).toBe(value);
+    },
+  );
+  it.each([
+    '😀'.repeat(281),
+    ` ${'a'.repeat(279)} `,
+    '',
+    '  ',
+    'a\tb',
+    'a\nb',
+    'a\u0085b',
+    null,
+    42,
+  ])('rejects invalid validation text', (value) => {
+    expect(() => PhraseText.forValidation(value as string)).toThrow(
+      InvalidPhraseTextError,
+    );
+  });
+  it('preserves accents and punctuation in its normalized value', () => {
+    expect(PhraseText.forValidation(' ¡ÁRBOL!   EN Cusco. ').normalized).toBe(
+      '¡árbol! en cusco.',
+    );
+    expect(new PhraseText('😀'.repeat(500)).value).toHaveLength(1000);
+  });
+});

@@ -10,7 +10,10 @@ describe('ListPhrasesUseCase', () => {
     ReturnType<PhraseRepositoryPort['list']>,
     Parameters<PhraseRepositoryPort['list']>
   >();
-  const useCase = new ListPhrasesUseCase({ list });
+  const useCase = new ListPhrasesUseCase({
+    list,
+    findValidationMatch: jest.fn(),
+  });
 
   beforeEach(() => list.mockReset());
 

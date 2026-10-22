@@ -1,0 +1,29 @@
+import { ArgumentsHost, Catch, ExceptionFilter } from '@nestjs/common';
+import type { Response } from 'express';
+import { InvalidPhraseTextError } from '../../../domain/errors/invalid-phrase-text.error';
+import { buildProblemDetail } from '../../../../../shared/infrastructure/http/problem-detail/build-problem-detail';
+@Catch(InvalidPhraseTextError)
+export class InvalidValidationTextFilter implements ExceptionFilter<InvalidPhraseTextError> {
+  catch(_exception: InvalidPhraseTextError, host: ArgumentsHost): void {
+    host
+      .switchToHttp()
+      .getResponse<Response>()
+      .status(400)
+      .type('application/problem+json')
+      .json(
+        buildProblemDetail({
+          status: 400,
+          detail: 'Los datos enviados no son válidos.',
+          code: 'VALIDATION_ERROR',
+          errors: [
+            {
+              field: 'text',
+              messages: [
+                'El texto debe contener de 1 a 280 puntos de código Unicode, sin controles ni texto vacío.',
+              ],
+            },
+          ],
+        }),
+      );
+  }
+}

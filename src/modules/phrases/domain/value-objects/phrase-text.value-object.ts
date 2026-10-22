@@ -3,6 +3,14 @@ import { InvalidPhraseTextError } from '../errors/invalid-phrase-text.error';
 export class PhraseText {
   readonly value: string;
 
+  static forValidation(value: string): PhraseText {
+    const text = new PhraseText(value);
+    if ([...value].length > 280) {
+      throw new InvalidPhraseTextError('Máximo 280 puntos de código Unicode.');
+    }
+    return text;
+  }
+
   get normalized(): string {
     return this.value.trim().toLowerCase().replace(/\s+/g, ' ');
   }

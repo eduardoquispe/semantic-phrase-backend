@@ -1,3 +1,6 @@
+import { teiConfig } from './fixtures/tei';
+import { EmbeddingGeneratorPort } from '../src/modules/phrases/application/ports/outbound/embedding-generator.port';
+import { ConfigService } from '@nestjs/config';
 import { INestApplication, ServiceUnavailableException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -28,13 +31,22 @@ process.env.DATABASE_URL ??=
 
 describe('GET /api/v1/phrases', () => {
   let app: INestApplication<App>;
-  const repository = { list: jest.fn() };
+  const repository = { list: jest.fn(), findValidationMatch: jest.fn() };
   let rows: Phrase[] = [];
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PhraseRepositoryPort)
       .useValue(repository)
+      .overrideProvider(ConfigService)
+      .useValue(
+        new ConfigService({
+          ...teiConfig,
+          DATABASE_URL: process.env.DATABASE_URL,
+        }),
+      )
+      .overrideProvider(EmbeddingGeneratorPort)
+      .useValue({ generate: jest.fn() })
       .compile();
     app = module.createNestApplication();
     configureApp(app);
@@ -74,11 +86,32 @@ describe('GET /api/v1/phrases', () => {
     );
   }
 
-  it('keeps GET /', async () => {
-    await request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  it('lists historical texts of 281–500 code points', async () => {
+    seed(1);
+    const original = rows[0];
+    for (const size of [281, 500]) {
+      rows = [
+        new Phrase({
+          id: new PhraseId(original.id),
+          text: new PhraseText('😀'.repeat(size)),
+          normalizedText: '😀'.repeat(size),
+          embedding: original.embedding,
+          modelId: original.modelId,
+          modelVersion: original.modelVersion,
+          createdAt: original.createdAt,
+        }),
+      ];
+      const response = await request(app.getHttpServer())
+        .get('/api/v1/phrases')
+        .expect(200);
+      expect((response.body as ListPhrasesResponseDto).data[0].text).toBe(
+        '😀'.repeat(size),
+      );
+    }
+  });
+
+  it('does not expose the removed starter route', async () => {
+    await request(app.getHttpServer()).get('/').expect(404);
   });
 
   it.each([0, 1, 20, 21])(

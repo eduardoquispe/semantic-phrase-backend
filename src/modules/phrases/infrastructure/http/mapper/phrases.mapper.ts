@@ -1,8 +1,31 @@
+import type { ValidatePhraseResult } from '../../../application/ports/inbound/validate-phrase.port';
+import { PhraseValidationResponseDto } from '../dtos/phrase-validation-response.dto';
 import { Phrase } from '../../../domain/entities/phrase.entity';
 import { ListPhrasesResponseDto } from '../dtos/list-phrases-response.dto';
 import { ListPhrasesResult } from '../../../application/ports/inbound/list-phrases.port';
 
 export class PhrasesMapper {
+  static toValidationResponse(
+    result: ValidatePhraseResult,
+  ): PhraseValidationResponseDto {
+    const match = result.match;
+    return {
+      data: {
+        validationId: result.validationId,
+        expiresAt: result.expiresAt.toISOString(),
+        requiresConfirmation: result.requiresConfirmation,
+        match:
+          match === null
+            ? null
+            : {
+                type: match.type,
+                phrase: { id: match.phrase.id, text: match.phrase.text },
+                similarityScore: match.similarityScore?.value ?? null,
+              },
+      },
+    };
+  }
+
   static toListPhrasesResponseDto(
     list: ListPhrasesResult,
   ): ListPhrasesResponseDto {

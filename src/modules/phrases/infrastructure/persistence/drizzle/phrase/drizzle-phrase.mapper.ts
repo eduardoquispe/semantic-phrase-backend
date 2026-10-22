@@ -1,8 +1,8 @@
-import { PhraseId } from '../../../domain/value-objects/phrase-id.value-object';
+import { Phrase } from '../../../../domain/entities/phrase.entity';
 import { DrizzlePhrasesModel } from './drizzle-phrases.model';
-import { Phrase } from '../../../domain/entities/phrase.entity';
-import { PhraseText } from '../../../domain/value-objects/phrase-text.value-object';
-import { Embedding } from '../../../domain/value-objects/embedding.value-object';
+import { PhraseId } from '../../../../domain/value-objects/phrase-id.value-object';
+import { PhraseText } from '../../../../domain/value-objects/phrase-text.value-object';
+import { Embedding } from '../../../../domain/value-objects/embedding.value-object';
 
 export class DrizzlePhraseMapper {
   static toDomain(raw: typeof DrizzlePhrasesModel.$inferSelect): Phrase {

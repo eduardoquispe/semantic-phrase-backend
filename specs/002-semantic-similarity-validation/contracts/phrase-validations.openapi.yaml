@@ -1,0 +1,237 @@
+openapi: 3.1.0
+info:
+  title: F002 — Validación de similitud semántica
+  version: 1.0.0
+  description: Proyección de diseño F002. Aplicar las diferencias al contrato compartido antes de implementar.
+servers:
+  - url: http://localhost:3000/api/v1
+security: []
+paths:
+  /phrase-validations:
+    post:
+      operationId: validatePhrase
+      summary: Crear validación temporal sin registrar una frase
+      description: |
+        Cuerpo y query sin propiedades ajenas al contrato. Genera siempre embedding
+        válido MiniLM y prioriza igualdad textual. Sin igualdad textual, recupera
+        Top-1 exacto compatible por coseno y aplica umbral configurable, inicialmente
+        0.8538613695045911. Candidata vectorial se devuelve incluso bajo umbral.
+        Colección vacía produce match nulo. Colección no vacía sin igualdad textual
+        ni vectores compatibles produce 500 INTERNAL_ERROR. Igualdad textual prima
+        incluso con vectores almacenados incompatibles. Guarda validación temporal
+        sin consumir y devuelve su UUID con TTL inicial configurable de 15 minutos.
+        No registra frases, no autentica usuarios y no impone rate limiting.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidatePhraseRequest'
+            example:
+              text: Me gusta viajar a Cusco
+      responses:
+        '201':
+          description: Validación conservada y comprobante emitido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhraseValidationEnvelope'
+              examples:
+                empty:
+                  value:
+                    data:
+                      validationId: '550e8400-e29b-41d4-a716-446655440000'
+                      expiresAt: '2026-10-22T15:15:00Z'
+                      requiresConfirmation: false
+                      match: null
+                textual:
+                  value:
+                    data:
+                      validationId: '550e8400-e29b-41d4-a716-446655440000'
+                      expiresAt: '2026-10-22T15:15:00Z'
+                      requiresConfirmation: true
+                      match:
+                        type: textual_exact
+                        phrase:
+                          {
+                            id: 123e4567-e89b-42d3-a456-426614174000,
+                            text: Me gusta viajar a Cusco,
+                          }
+                        similarityScore: null
+                vectorWarning:
+                  value:
+                    data:
+                      validationId: '550e8400-e29b-41d4-a716-446655440000'
+                      expiresAt: '2026-10-22T15:15:00Z'
+                      requiresConfirmation: true
+                      match:
+                        type: vector
+                        phrase:
+                          {
+                            id: 123e4567-e89b-42d3-a456-426614174000,
+                            text: Me encanta viajar a Cusco,
+                          }
+                        similarityScore: 0.92
+                vectorBelowThreshold:
+                  value:
+                    data:
+                      validationId: '550e8400-e29b-41d4-a716-446655440000'
+                      expiresAt: '2026-10-22T15:15:00Z'
+                      requiresConfirmation: false
+                      match:
+                        type: vector
+                        phrase:
+                          {
+                            id: 123e4567-e89b-42d3-a456-426614174000,
+                            text: Necesito comprar pan,
+                          }
+                        similarityScore: -0.1
+        '400':
+          description: Texto inválido, propiedades desconocidas o query ajena al contrato
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+              example:
+                title: Bad Request
+                status: 400
+                detail: Los datos enviados no son válidos.
+                code: VALIDATION_ERROR
+                errors: [{ field: text, messages: ['Máximo 280 caracteres.'] }]
+        '500':
+          description: Fallo inesperado, emisión fallida del token o corpus sin vectores compatibles y sin igualdad textual
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+              example:
+                title: Internal Server Error
+                status: 500
+                detail: Ocurrió un error interno.
+                code: INTERNAL_ERROR
+        '503':
+          description: Servicio de embeddings no disponible, comunicación o inferencia fallida, respuesta malformada, timeout o vector inválido; o indisponibilidad conocida de datos
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+              examples:
+                ai:
+                  value:
+                    {
+                      title: Service Unavailable,
+                      status: 503,
+                      detail: El servicio de IA no está disponible.,
+                      code: AI_UNAVAILABLE,
+                    }
+                database:
+                  value:
+                    {
+                      title: Service Unavailable,
+                      status: 503,
+                      detail: La base de datos no está disponible.,
+                      code: DATABASE_UNAVAILABLE,
+                    }
+components:
+  schemas:
+    ValidationPhraseText:
+      type: string
+      minLength: 1
+      maxLength: 280
+      description: |
+        Puntos de código Unicode del texto original, incluidos espacios externos.
+        trim no debe quedar vacío. Rechazar categoría Unicode Cc; no exigir letras.
+        No modificar el original ni detectar idioma. Estas reglas adicionales
+        se validan en ejecución, además de este esquema.
+    ValidatePhraseRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { $ref: '#/components/schemas/ValidationPhraseText' }
+    MatchedPhrase:
+      type: object
+      additionalProperties: false
+      required: [id, text]
+      properties:
+        id: { type: string, format: uuid }
+        text:
+          {
+            type: string,
+            description: Texto original existente; no limitar a 280 datos previos.,
+          }
+    TextualExactMatch:
+      type: object
+      additionalProperties: false
+      required: [type, phrase, similarityScore]
+      properties:
+        type: { type: string, const: textual_exact }
+        phrase: { $ref: '#/components/schemas/MatchedPhrase' }
+        similarityScore: { type: 'null' }
+    VectorMatch:
+      type: object
+      additionalProperties: false
+      required: [type, phrase, similarityScore]
+      properties:
+        type: { type: string, const: vector }
+        phrase: { $ref: '#/components/schemas/MatchedPhrase' }
+        similarityScore:
+          {
+            type: number,
+            minimum: -1,
+            maximum: 1,
+            description: Coseno; no probabilidad.,
+          }
+    PhraseValidationResult:
+      type: object
+      additionalProperties: false
+      required: [validationId, expiresAt, requiresConfirmation, match]
+      properties:
+        validationId:
+          type: string
+          format: uuid
+          description: UUID v4 aleatorio de la validación persistida.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Misma expiración que la fila temporal, precisión de segundos.
+        requiresConfirmation:
+          type: boolean
+          description: true para textual o coseno >= umbral; false para colección vacía o coseno inferior.
+        match:
+          oneOf:
+            - $ref: '#/components/schemas/TextualExactMatch'
+            - $ref: '#/components/schemas/VectorMatch'
+            - type: 'null'
+    PhraseValidationEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/PhraseValidationResult' }
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, messages]
+      properties:
+        field: { type: string }
+        messages:
+          type: array
+          items: { type: string }
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required: [title, status, detail, code]
+      properties:
+        title: { type: string }
+        status: { type: integer, enum: [400, 500, 503] }
+        detail: { type: string }
+        code:
+          type: string
+          enum:
+            [
+              VALIDATION_ERROR,
+              INTERNAL_ERROR,
+              AI_UNAVAILABLE,
+              DATABASE_UNAVAILABLE,
+            ]
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/FieldError' }
