@@ -9,8 +9,16 @@ import { InvalidPhraseTextError } from '../../domain/errors/invalid-phrase-text.
 import { ValidationMatchEnum } from '../../domain/enums/validation-match.enum';
 describe('ValidatePhraseUseCase', () => {
   const generator = { generate: jest.fn() };
-  const repository = { list: jest.fn(), findValidationMatch: jest.fn() };
-  const validations = { save: jest.fn<Promise<void>, [PhraseValidation]>() };
+  const repository = {
+    list: jest.fn(),
+    findValidationMatch: jest.fn(),
+    save: jest.fn(),
+  };
+  const validations = {
+    findById: jest.fn(),
+    update: jest.fn(),
+    save: jest.fn<Promise<void>, [PhraseValidation]>(),
+  };
   const settings = { threshold: 0.8538613695045911, ttlMinutes: 15 };
   const useCase = new ValidatePhraseUseCase(
     generator,
@@ -52,7 +60,12 @@ describe('ValidatePhraseUseCase', () => {
       similarityScore: null,
     });
     expect(result.requiresConfirmation).toBe(true);
-    expect(result.validationId).toBe(validations.save.mock.calls[0][0].id);
+    const saved = validations.save.mock.calls[0][0];
+    expect(saved.normalizedText).toBe('hola cusco');
+    expect(saved.requiresConfirmation).toBe(true);
+    expect(saved.consumedAt).toBeNull();
+    expect(saved.match).toBe(result.match);
+    expect(result.validationId).toBe(saved.id);
     expect(repository.list).not.toHaveBeenCalled();
   });
   it.each([-0.7, 0.853861369504591, 0.8538613695045911, 0.9])(
@@ -65,6 +78,11 @@ describe('ValidatePhraseUseCase', () => {
       });
       const result = await useCase.execute({ text: 'Hola' });
       expect(result.requiresConfirmation).toBe(score >= settings.threshold);
+      const saved = validations.save.mock.calls[0][0];
+      expect(saved.requiresConfirmation).toBe(score >= settings.threshold);
+      expect(saved.normalizedText).toBe('hola');
+      expect(saved.consumedAt).toBeNull();
+      expect(saved.match).toBe(result.match);
       expect(result.match?.phrase).toEqual(phrase);
       expect(result.match?.similarityScore?.value).toBe(score);
     },
@@ -75,6 +93,10 @@ describe('ValidatePhraseUseCase', () => {
     expect(result.requiresConfirmation).toBe(false);
     expect(generator.generate).toHaveBeenCalledTimes(1);
     const v = validations.save.mock.calls[0][0];
+    expect(v.normalizedText).toBe('hola');
+    expect(v.requiresConfirmation).toBe(false);
+    expect(v.consumedAt).toBeNull();
+    expect(v.match).toBeNull();
     expect(v.embedding.values).toEqual(generated.embedding.values);
     expect(v.model).toEqual(generated.model);
     expect(validations.save).toHaveBeenCalledTimes(1);

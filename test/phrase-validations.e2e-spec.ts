@@ -2,7 +2,7 @@ import { teiConfig, teiResponse } from './fixtures/tei';
 import { HuggingFaceEmbeddingAdapter } from '../src/modules/phrases/infrastructure/embeddings/huggin-face/hugging-face-embedding.adapter';
 import { IncompatiblePhraseCollectionError } from '../src/modules/phrases/application/errors/incompatible-phrase-collection.error';
 import { AiUnavailableError } from '../src/modules/phrases/infrastructure/embeddings/errors/ai-unavailable.error';
-import { DatabaseUnavailableError } from '../src/shared/infrastructure/database/errors/database-unavailable.error';
+import { DatabaseError } from '../src/shared/infrastructure/database/errors/database.error';
 import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
@@ -39,7 +39,11 @@ describe('POST /api/v1/phrase-validations', () => {
   let app: INestApplication<App>;
   let saved: PhraseValidation[] = [];
   const generator = { generate: jest.fn() };
-  const repository = { list: jest.fn(), findValidationMatch: jest.fn() };
+  const repository = {
+    list: jest.fn(),
+    findValidationMatch: jest.fn(),
+    save: jest.fn(),
+  };
   const validations = { save: jest.fn() };
   const phrase = {
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -183,8 +187,18 @@ describe('POST /api/v1/phrase-validations', () => {
   );
   it.each([
     ['generate', new AiUnavailableError(), 503, 'AI_UNAVAILABLE'],
-    ['find', new DatabaseUnavailableError(), 503, 'DATABASE_UNAVAILABLE'],
-    ['save', new DatabaseUnavailableError(), 503, 'DATABASE_UNAVAILABLE'],
+    [
+      'find',
+      new DatabaseError(new Error('secret SQL credentials')),
+      500,
+      'DATABASE_ERROR',
+    ],
+    [
+      'save',
+      new DatabaseError(new Error('secret SQL credentials')),
+      500,
+      'DATABASE_ERROR',
+    ],
     ['find', new Error('secret SQL credentials'), 500, 'INTERNAL_ERROR'],
     ['save', new Error('secret SQL credentials'), 500, 'INTERNAL_ERROR'],
   ])('returns safe failure for %s', async (stage, error, status, code) => {
@@ -262,7 +276,11 @@ describe('Validation with OpenAIEmbeddings and simulated TEI', () => {
   let app: INestApplication<App>;
   let transport: jest.SpyInstance;
   const config = new ConfigService(teiConfig);
-  const repository = { list: jest.fn(), findValidationMatch: jest.fn() };
+  const repository = {
+    list: jest.fn(),
+    findValidationMatch: jest.fn(),
+    save: jest.fn(),
+  };
   const validations = { save: jest.fn() };
 
   beforeAll(async () => {

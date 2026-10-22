@@ -1,4 +1,8 @@
-import { Controller, Get, Query, UseFilters } from '@nestjs/common';
+import { CreatePhrasePort } from '../../../application/ports/inbound/create-phrase.port';
+import { CreatePhraseRequestDto } from '../dtos/create-phrase-request.dto';
+import { PhraseRegistrationFilter } from '../filters/phrase-registration.filter';
+import { InvalidValidationTextFilter } from '../filters/invalid-validation-text.filter';
+import { Body, Controller, Get, Post, Query, UseFilters } from '@nestjs/common';
 import { ListPhrasesQueryDto } from '../dtos/list-phrases-query.dto';
 import { ListPhrasesPort } from '../../../application/ports/inbound/list-phrases.port';
 import { InvalidEmbeddingFilter } from '../filters/invalid-embedding.filter';
@@ -13,11 +17,21 @@ import { PhrasesMapper } from '../mapper/phrases.mapper';
   InvalidPhraseTextFilter,
 )
 export class PhrasesController {
-  constructor(private readonly listPhrases: ListPhrasesPort) {}
+  constructor(
+    private readonly listPhrasesUseCase: ListPhrasesPort,
+    private readonly createPhraseUseCase: CreatePhrasePort,
+  ) {}
+
+  @Post()
+  @UseFilters(PhraseRegistrationFilter, InvalidValidationTextFilter)
+  async post(@Body() body: CreatePhraseRequestDto) {
+    const response = await this.createPhraseUseCase.execute(body);
+    return PhrasesMapper.toCreatePhraseResponse(response);
+  }
 
   @Get()
   async get(@Query() query: ListPhrasesQueryDto) {
-    const list = await this.listPhrases.execute(query);
+    const list = await this.listPhrasesUseCase.execute(query);
     return PhrasesMapper.toListPhrasesResponseDto(list);
   }
 }

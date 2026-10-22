@@ -33,14 +33,18 @@ export class ValidatePhraseUseCase implements ValidatePhrasePort {
       normalizedText: text.normalized,
     });
 
+    const match = result ? new PhraseValidationMatch(result) : null;
     const now = Math.floor(Date.now() / 1000) * 1000;
 
     const validation = new PhraseValidation({
       id: new PhraseId(randomUUID()),
       text,
       ...embedding,
-      match: result ? new PhraseValidationMatch(result) : null,
-      threshold: this.settings.threshold,
+      match,
+      normalizedText: text.normalized,
+      requiresConfirmation:
+        match?.requiresConfirmation(this.settings.threshold) ?? false,
+      consumedAt: null,
       createdAt: new Date(now),
       expiresAt: new Date(now + this.settings.ttlMinutes * 60 * 1000),
     });

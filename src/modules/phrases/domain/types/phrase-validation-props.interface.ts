@@ -10,7 +10,9 @@ export interface PhraseValidationProps {
   embedding: Embedding;
   model: PhraseModel;
   match: PhraseValidationMatch | null;
-  threshold: number;
+  normalizedText: string;
+  requiresConfirmation: boolean;
+  consumedAt: Date | null;
   createdAt: Date;
   expiresAt: Date;
 }

@@ -1,0 +1,247 @@
+openapi: 3.1.0
+info:
+  title: F003 — Registro de frases con confirmación HITL
+  version: 1.0.0
+  description: Contrato de F003 implementado; evidencia de verificación en ../quickstart.md.
+servers:
+  - url: /api/v1
+paths:
+  /phrases:
+    post:
+      operationId: createPhrase
+      summary: Registrar el original autorizado por una validación temporal
+      description: |
+        Sin autenticación ni parámetros de consulta. Sin límite global de volumen.
+        Comprobar referencia UUID v4 existente, texto original exacto, modelo/versión
+        compatibles, vigencia y consumo. Si requiresConfirmation almacenado es true,
+        exigir confirmed=true. confirmed omitido equivale a false.
+        Sin transacción ni compensación ni registro único concurrente. Si falla
+        INSERT no se consume; si falla consumo, la frase permanece y se propaga el error.
+        Insertar frase y después actualizar consumedAt, reutilizando texto,
+        normalizado y vector almacenados; sin inferencia ni evaluación de similitud.
+        Se permiten duplicados autorizados con distintas validaciones.
+        now >= expiresAt implica expiración al leer. Un reenvío tras consumo recibe consumo
+        previo, sin promesa de repetir la respuesta original.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePhraseRequest'
+            examples:
+              withoutAlert:
+                value:
+                  text: Me gusta viajar a Cusco
+                  validationId: 550e8400-e29b-41d4-a716-446655440000
+              withConfirmation:
+                value:
+                  text: Me gusta viajar a Cusco
+                  validationId: 550e8400-e29b-41d4-a716-446655440000
+                  confirmed: true
+      responses:
+        '201':
+          description: Frase insertada y consumo guardado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhraseEnvelope'
+              example:
+                data:
+                  id: 123e4567-e89b-42d3-a456-426614174000
+                  text: Me gusta viajar a Cusco
+                  createdAt: '2026-10-22T19:02:00Z'
+        '400':
+          description: |
+            VALIDATION_ERROR para texto/confirmed inválidos, propiedades o query
+            desconocidas. INVALID_VALIDATION_ID para referencia ausente,
+            malformada o inexistente. PHRASE_MISMATCH para original distinto.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BadRequestProblem'
+              examples:
+                invalidInput:
+                  value:
+                    title: Bad Request
+                    status: 400
+                    detail: Los datos enviados no son válidos.
+                    code: VALIDATION_ERROR
+                    errors:
+                      - field: confirmed
+                        messages: [Debe ser un booleano real.]
+                invalidReference:
+                  value:
+                    title: Bad Request
+                    status: 400
+                    detail: La referencia de validación no es válida.
+                    code: INVALID_VALIDATION_ID
+                changedText:
+                  value:
+                    title: Bad Request
+                    status: 400
+                    detail: El texto no coincide con el original validado.
+                    code: PHRASE_MISMATCH
+        '409':
+          description: Validación expirada, ya consumida o pendiente de confirmación
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ConflictProblem'
+              examples:
+                expired:
+                  value:
+                    title: Conflict
+                    status: 409
+                    detail: La validación expiró. Valida nuevamente la frase.
+                    code: VALIDATION_EXPIRED
+                used:
+                  value:
+                    title: Conflict
+                    status: 409
+                    detail: La validación ya fue utilizada.
+                    code: VALIDATION_ALREADY_USED
+                confirmationRequired:
+                  value:
+                    title: Conflict
+                    status: 409
+                    detail: Debes confirmar el registro de esta coincidencia.
+                    code: CONFIRMATION_REQUIRED
+        '500':
+          description: Fallo de BD, fallo inesperado o modelo/versión incompatible; mensaje seguro
+          content:
+            application/problem+json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/InternalProblem'
+                  - $ref: '#/components/schemas/DatabaseProblem'
+              examples:
+                internal:
+                  value:
+                    title: Internal Server Error
+                    status: 500
+                    detail: Ocurrió un error interno.
+                    code: INTERNAL_ERROR
+                database:
+                  value:
+                    title: Internal Server Error
+                    status: 500
+                    detail: Ocurrió un error de base de datos.
+                    code: DATABASE_ERROR
+components:
+  schemas:
+    UuidV4:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
+    CreatePhraseRequest:
+      type: object
+      additionalProperties: false
+      required: [text, validationId]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 280
+          description: |
+            Puntos de código Unicode del original, incluidos espacios externos.
+            Debe ser no vacío tras trim y no contener controles Unicode Cc.
+            Signos y emojis admitidos. Conservar original idéntico al validado.
+        validationId:
+          $ref: '#/components/schemas/UuidV4'
+        confirmed:
+          type: boolean
+          default: false
+          description: Opcional; null, números y cadenas se rechazan sin coerción.
+    PhraseEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [id, text, createdAt]
+          properties:
+            id:
+              $ref: '#/components/schemas/UuidV4'
+            text:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+              description: Fecha nueva del registro con zona horaria.
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, messages]
+      properties:
+        field:
+          type: string
+        messages:
+          type: array
+          items:
+            type: string
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required: [title, status, detail, code]
+      description: Subconjunto RFC 9457; no type explícito, timestamp ni traceId.
+      properties:
+        title:
+          type: string
+        status:
+          type: integer
+          enum: [400, 409, 500]
+        detail:
+          type: string
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - INVALID_VALIDATION_ID
+            - PHRASE_MISMATCH
+            - VALIDATION_EXPIRED
+            - VALIDATION_ALREADY_USED
+            - CONFIRMATION_REQUIRED
+            - INTERNAL_ERROR
+            - DATABASE_ERROR
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    BadRequestProblem:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            status:
+              const: 400
+            code:
+              enum: [VALIDATION_ERROR, INVALID_VALIDATION_ID, PHRASE_MISMATCH]
+    ConflictProblem:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            status:
+              const: 409
+            code:
+              enum: [VALIDATION_EXPIRED, VALIDATION_ALREADY_USED, CONFIRMATION_REQUIRED]
+    InternalProblem:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            status:
+              const: 500
+            code:
+              const: INTERNAL_ERROR
+    DatabaseProblem:
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetails'
+        - type: object
+          properties:
+            status:
+              const: 500
+            code:
+              const: DATABASE_ERROR

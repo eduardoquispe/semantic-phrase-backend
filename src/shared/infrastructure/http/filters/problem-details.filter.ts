@@ -4,15 +4,18 @@ import {
   ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import { DatabaseUnavailableError } from '../../database/errors/database-unavailable.error';
+import { DatabaseError } from '../../database/errors/database.error';
 import type { ProblemDetail } from '../problem-detail/problem-detail';
 import { isValidationExceptionPayload } from '../validation/validation-exception.factory';
 import { buildProblemDetail } from '../problem-detail/build-problem-detail';
 
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ProblemDetailsFilter.name);
+
   constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
@@ -29,17 +32,18 @@ export class ProblemDetailsFilter implements ExceptionFilter {
   }
 
   private toProblemDetail(exception: unknown): ProblemDetail {
-    if (exception instanceof DatabaseUnavailableError) {
+    if (exception instanceof DatabaseError) {
+      this.logger.error(exception.cause, exception.stack);
       return buildProblemDetail({
-        status: HttpStatus.SERVICE_UNAVAILABLE,
-        detail: 'La base de datos no está disponible.',
-        code: 'DATABASE_UNAVAILABLE',
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        detail: 'Ocurrió un error de base de datos.',
+        code: 'DATABASE_ERROR',
       });
     }
     if (exception instanceof HttpException) {
       return this.handleHttp(exception);
     }
-    return this.handleUnknown();
+    return this.handleUnknown(exception);
   }
 
   private handleHttp(exception: HttpException): ProblemDetail {
@@ -47,7 +51,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const payload = exception.getResponse();
 
     if (status === 500) {
-      return this.handleUnknown();
+      return this.handleUnknown(exception);
     }
 
     if (status === 400) {
@@ -68,7 +72,11 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     });
   }
 
-  private handleUnknown(): ProblemDetail {
+  private handleUnknown(exception: unknown): ProblemDetail {
+    if (exception instanceof Error) {
+      this.logger.error(exception.message, exception.stack);
+    }
+
     return buildProblemDetail({
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       detail: 'Ocurrió un error interno.',

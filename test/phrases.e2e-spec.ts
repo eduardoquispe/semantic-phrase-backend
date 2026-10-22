@@ -1,12 +1,16 @@
 import { teiConfig } from './fixtures/tei';
 import { EmbeddingGeneratorPort } from '../src/modules/phrases/application/ports/outbound/embedding-generator.port';
 import { ConfigService } from '@nestjs/config';
-import { INestApplication, ServiceUnavailableException } from '@nestjs/common';
+import {
+  INestApplication,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/configure-app';
-import { DatabaseUnavailableError } from '../src/shared/infrastructure/database/errors/database-unavailable.error';
+import { DatabaseError } from '../src/shared/infrastructure/database/errors/database.error';
 import { PhraseRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-repository.port';
 import { ListPhrasesResponseDto } from '../src/modules/phrases/infrastructure/http/dtos/list-phrases-response.dto';
 import { Phrase } from '../src/modules/phrases/domain/entities/phrase.entity';
@@ -31,7 +35,11 @@ process.env.DATABASE_URL ??=
 
 describe('GET /api/v1/phrases', () => {
   let app: INestApplication<App>;
-  const repository = { list: jest.fn(), findValidationMatch: jest.fn() };
+  const repository = {
+    list: jest.fn(),
+    findValidationMatch: jest.fn(),
+    save: jest.fn(),
+  };
   let rows: Phrase[] = [];
 
   beforeAll(async () => {
@@ -56,6 +64,8 @@ describe('GET /api/v1/phrases', () => {
   afterAll(async () => {
     await app.close();
   });
+
+  afterEach(() => jest.restoreAllMocks());
 
   beforeEach(() => {
     rows = [];
@@ -240,11 +250,18 @@ describe('GET /api/v1/phrases', () => {
   });
 
   it.each([
-    [new DatabaseUnavailableError(), 503, 'DATABASE_UNAVAILABLE'],
+    [
+      new DatabaseError(new Error('secret SQL credentials')),
+      500,
+      'DATABASE_ERROR',
+    ],
     [new Error('secret SQL credentials'), 500, 'INTERNAL_ERROR'],
   ])(
     'returns a safe problem for a controlled failure',
     async (error, status, code) => {
+      const log = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
       repository.list.mockRejectedValue(error);
       const response = await request(app.getHttpServer())
         .get('/api/v1/phrases')
@@ -255,6 +272,11 @@ describe('GET /api/v1/phrases', () => {
       );
       expect(body.status).toBe(status);
       expect(body.code).toBe(code);
+      if (error instanceof DatabaseError) {
+        expect(body.detail).toBe('Ocurrió un error de base de datos.');
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(log).toHaveBeenCalledWith(error.cause, error.stack);
+      }
       expect(typeof body.title).toBe('string');
       expect(typeof body.detail).toBe('string');
       expect(JSON.stringify(body)).not.toMatch(/secret|SQL|credentials|stack/i);

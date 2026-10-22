@@ -59,3 +59,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Local caches
 .cache/
+
+# Editor temporary files
+Thumbs.db
+*.tmp
+*.swp

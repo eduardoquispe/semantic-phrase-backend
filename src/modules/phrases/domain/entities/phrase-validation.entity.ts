@@ -11,7 +11,7 @@ export class PhraseValidation {
   readonly model: PhraseModel;
   readonly normalizedText: string;
   readonly requiresConfirmation: boolean;
-  readonly consumedAt = null;
+  private readonly consumed: number | null;
   private readonly created: number;
   private readonly expires: number;
   readonly match: PhraseValidationMatch | null;
@@ -19,16 +19,21 @@ export class PhraseValidation {
   constructor(props: PhraseValidationProps) {
     this.id = props.id.value;
     this.text = props.text;
-    this.normalizedText = this.text.normalized;
     this.embedding = props.embedding;
     this.model = props.model;
     this.created = props.createdAt.getTime();
     this.expires = props.expiresAt.getTime();
+
+    this.normalizedText = props.normalizedText;
+    this.requiresConfirmation = props.requiresConfirmation;
+    this.consumed = props.consumedAt?.getTime() ?? null;
     this.match = props.match;
-    this.requiresConfirmation =
-      this.match?.requiresConfirmation(props.threshold) ?? false;
 
     Object.freeze(this);
+  }
+
+  get consumedAt(): Date | null {
+    return this.consumed === null ? null : new Date(this.consumed);
   }
 
   get createdAt(): Date {

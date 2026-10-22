@@ -103,7 +103,7 @@ description: 'Tareas de transición de F002 desde inferencia local hacia TEI exi
 
 - [x] T024 [US3] Resolver discrepancias del adaptador mínimo detectadas por T022–T023, manteniendo únicamente embedQuery/VOs/traducción segura y timeout del SDK. No añadir fetch, abort, deadline ni fallback propios.
 - [x] T025 [US3] Verificar filtros de AI_UNAVAILABLE y VALIDATION_ERROR, y usar el filtro global existente para 500 INTERNAL_ERROR incompatible; retirar el filtro específico redundante. Mantener Problem Details seguro sin mensajes SDK/SQL/stack.
-- [x] T026 [US3] Verificar con `src/modules/phrases/infrastructure/persistence/drizzle/database-operation-error.spec.ts`, `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository.spec.ts` y `src/modules/phrases/infrastructure/persistence/drizzle/phrase-validation/drizzle-phrase-validation.repository.spec.ts` que consulta/INSERT conservan clasificación selectiva: indisponibilidad conocida 503 y SQL/restricciones inesperadas 500; corregir solo discrepancias en adaptadores y mantener list F001.
+- [x] T026 [US3] Verificar con `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository.spec.ts` y `src/modules/phrases/infrastructure/persistence/drizzle/phrase-validation/drizzle-phrase-validation.repository.spec.ts` que consulta/INSERT convierten fallos de conexión, SQL y restricciones a `DatabaseError` con causa; cubrir también listado F001 y mantener mapeos/errores de dominio y aplicación fuera de las capturas.
 
 **Checkpoint**: fallos del servicio nuevo no autorizan guardado ni producen falso resultado sin coincidencia; toda la matriz pública sigue vigente.
 
