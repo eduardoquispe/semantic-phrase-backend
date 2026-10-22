@@ -1,8 +1,8 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConfigurationPort } from '../../../../shared/application/ports/outbound/configuration.port';
+import { Injectable } from '@nestjs/common';
 import {
   CreatePhrasePort,
   CreatePhraseInput,
-  REGISTRATION_MODEL,
 } from '../ports/inbound/create-phrase.port';
 import { PhraseValidationRepositoryPort } from '../ports/outbound/phrase-validation-repository.port';
 import { PhraseRepositoryPort } from '../ports/outbound/phrase-repository.port';
@@ -15,11 +15,18 @@ import { PhraseRegistrationError } from '../errors/phrase-registration.error';
 
 @Injectable()
 export class CreatePhraseUseCase implements CreatePhrasePort {
+  private readonly expectedModel: PhraseModel;
+
   constructor(
     private readonly validations: PhraseValidationRepositoryPort,
     private readonly phrases: PhraseRepositoryPort,
-    @Inject(REGISTRATION_MODEL) private readonly expectedModel: PhraseModel,
-  ) {}
+    private readonly config: ConfigurationPort,
+  ) {
+    this.expectedModel = new PhraseModel(
+      config.getOrThrow<string>('AI_MODEL'),
+      config.getOrThrow<string>('AI_EMBEDDING_VERSION'),
+    );
+  }
   async execute(input: CreatePhraseInput) {
     const text = PhraseText.forValidation(input.text).value;
     const validation = await this.validations.findById(input.validationId);

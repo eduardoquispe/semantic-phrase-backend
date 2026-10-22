@@ -1,3 +1,4 @@
+import { ConfigurationStub } from '../../../../../test/fixtures/configuration';
 import { teiConfig } from '../../../../../test/fixtures/tei';
 import { ValidatePhraseUseCase } from './validate-phrase.use-case';
 import { Embedding } from '../../domain/value-objects/embedding.value-object';
@@ -24,7 +25,7 @@ describe('ValidatePhraseUseCase', () => {
     generator,
     repository,
     validations,
-    settings,
+    new ConfigurationStub(),
   );
   const phrase = {
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -163,7 +164,7 @@ describe('ValidatePhraseUseCase', () => {
       generator,
       repository,
       validations,
-      { ...settings, ttlMinutes: 2 },
+      new ConfigurationStub({ PHRASE_VALIDATION_TTL_MINUTES: '2' }),
     );
     const result = await custom.execute({ text: 'Hola' });
     expect(result.expiresAt.toISOString()).toBe('2026-10-22T12:02:00.000Z');

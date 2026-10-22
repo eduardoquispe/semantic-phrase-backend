@@ -1,4 +1,5 @@
-import { ConfigService } from '@nestjs/config';
+import { ConfigurationPort } from '../../../../../shared/application/ports/outbound/configuration.port';
+import { ConfigurationStub } from '../../../../../../test/fixtures/configuration';
 import { Test } from '@nestjs/testing';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { HuggingFaceEmbeddingAdapter } from './hugging-face-embedding.adapter';
@@ -9,7 +10,7 @@ jest.mock('@langchain/openai', () => ({ OpenAIEmbeddings: jest.fn() }));
 
 describe('HuggingFaceEmbeddingAdapter', () => {
   const embedQuery = jest.fn();
-  const config = new ConfigService(teiConfig);
+  const config = new ConfigurationStub(teiConfig);
   let adapter: HuggingFaceEmbeddingAdapter;
 
   beforeEach(() => {
@@ -35,7 +36,7 @@ describe('HuggingFaceEmbeddingAdapter', () => {
 
   it('uses another destination when the configured URL changes', () => {
     new HuggingFaceEmbeddingAdapter(
-      new ConfigService({
+      new ConfigurationStub({
         ...teiConfig,
         AI_EMBEDDINGS_URL: 'https://other/custom/',
       }),
@@ -51,7 +52,7 @@ describe('HuggingFaceEmbeddingAdapter', () => {
     const module = await Test.createTestingModule({
       providers: [
         HuggingFaceEmbeddingAdapter,
-        { provide: ConfigService, useValue: config },
+        { provide: ConfigurationPort, useValue: config },
       ],
     }).compile();
     await module.init();

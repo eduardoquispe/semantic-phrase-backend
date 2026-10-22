@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigurationStub } from '../../../../test/fixtures/configuration';
 import { Pool } from 'pg';
 import { DatabaseProvider } from './database.provider';
 
@@ -7,7 +7,7 @@ describe('Database configuration and lifecycle', () => {
   function createProvider(
     value: string | undefined = 'postgresql://user:password@localhost/db',
   ) {
-    const config = new ConfigService();
+    const config = new ConfigurationStub();
     jest.spyOn(config, 'get').mockReturnValue(value);
     return new DatabaseProvider(config);
   }
@@ -20,7 +20,7 @@ describe('Database configuration and lifecycle', () => {
     ['postgresql:///db', 'DATABASE_URL must be a PostgreSQL URL'],
     ['postgresql://user:secret@', 'DATABASE_URL must be a PostgreSQL URL'],
   ])('rejects invalid configuration with a safe error', (value, message) => {
-    const config = new ConfigService();
+    const config = new ConfigurationStub();
     jest.spyOn(config, 'get').mockReturnValue(value);
     expect(() => new DatabaseProvider(config)).toThrow(new Error(message));
   });

@@ -1,13 +1,12 @@
+import { ConfigurationPort } from '../../../../shared/application/ports/outbound/configuration.port';
 import { PhraseValidationMatch } from '../../domain/value-objects/phrase-validation-match.value-object';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   ValidatePhrasePort,
   ValidatePhraseInput,
   ValidatePhraseResult,
-  VALIDATION_SETTINGS,
 } from '../ports/inbound/validate-phrase.port';
-import type { ValidationSettings } from '../ports/inbound/validate-phrase.port';
 import { EmbeddingGeneratorPort } from '../ports/outbound/embedding-generator.port';
 import { PhraseRepositoryPort } from '../ports/outbound/phrase-repository.port';
 import { PhraseValidationRepositoryPort } from '../ports/outbound/phrase-validation-repository.port';
@@ -17,12 +16,24 @@ import { PhraseValidation } from '../../domain/entities/phrase-validation.entity
 
 @Injectable()
 export class ValidatePhraseUseCase implements ValidatePhrasePort {
+  private readonly settings: { threshold: number; ttlMinutes: number };
+
   constructor(
     private readonly generatorEmbedding: EmbeddingGeneratorPort,
     private readonly phrasesRepository: PhraseRepositoryPort,
     private readonly validations: PhraseValidationRepositoryPort,
-    @Inject(VALIDATION_SETTINGS) private readonly settings: ValidationSettings,
-  ) {}
+    private readonly config: ConfigurationPort,
+  ) {
+    this.settings = {
+      threshold: Number(
+        config.get<string | number>('AI_SIMILARITY_THRESHOLD') ??
+          0.8538613695045911,
+      ),
+      ttlMinutes: Number(
+        config.get<string | number>('PHRASE_VALIDATION_TTL_MINUTES') ?? 15,
+      ),
+    };
+  }
 
   async execute(input: ValidatePhraseInput): Promise<ValidatePhraseResult> {
     const text = PhraseText.forValidation(input.text);

@@ -1,17 +1,9 @@
-import {
-  CreatePhrasePort,
-  REGISTRATION_MODEL,
-} from './application/ports/inbound/create-phrase.port';
+import { CreatePhrasePort } from './application/ports/inbound/create-phrase.port';
 import { CreatePhraseUseCase } from './application/use-cases/create-phrase.use-case';
-import { PhraseModel } from './domain/value-objects/phrase-model.value-object';
-import {
-  ValidatePhrasePort,
-  VALIDATION_SETTINGS,
-} from './application/ports/inbound/validate-phrase.port';
+import { ValidatePhrasePort } from './application/ports/inbound/validate-phrase.port';
 import { EmbeddingGeneratorPort } from './application/ports/outbound/embedding-generator.port';
 import { PhraseValidationRepositoryPort } from './application/ports/outbound/phrase-validation-repository.port';
 import { ValidatePhraseUseCase } from './application/use-cases/validate-phrase.use-case';
-import { ConfigService } from '@nestjs/config';
 import { HuggingFaceEmbeddingAdapter } from './infrastructure/embeddings/huggin-face/hugging-face-embedding.adapter';
 import { PhraseValidationsController } from './infrastructure/http/controllers/phrase-validations.controller';
 import { Module } from '@nestjs/common';
@@ -29,28 +21,6 @@ import { DrizzlePhraseValidationRepository } from './infrastructure/persistence/
   providers: [
     CreatePhraseUseCase,
     { provide: CreatePhrasePort, useExisting: CreatePhraseUseCase },
-    {
-      provide: REGISTRATION_MODEL,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) =>
-        new PhraseModel(
-          config.getOrThrow<string>('AI_MODEL'),
-          config.getOrThrow<string>('AI_EMBEDDING_VERSION'),
-        ),
-    },
-    {
-      provide: VALIDATION_SETTINGS,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        threshold: Number(
-          config.get<string | number>('AI_SIMILARITY_THRESHOLD') ??
-            0.8538613695045911,
-        ),
-        ttlMinutes: Number(
-          config.get<string | number>('PHRASE_VALIDATION_TTL_MINUTES') ?? 15,
-        ),
-      }),
-    },
     ValidatePhraseUseCase,
     { provide: ValidatePhrasePort, useExisting: ValidatePhraseUseCase },
     { provide: EmbeddingGeneratorPort, useClass: HuggingFaceEmbeddingAdapter },

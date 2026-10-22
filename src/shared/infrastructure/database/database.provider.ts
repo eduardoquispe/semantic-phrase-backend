@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigurationPort } from '../../application/ports/outbound/configuration.port';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
 @Injectable()
@@ -10,7 +10,7 @@ export class DatabaseProvider implements OnApplicationShutdown {
     this.logger.error('Unexpected error on an idle database connection');
   };
 
-  constructor(config: ConfigService) {
+  constructor(private readonly config: ConfigurationPort) {
     const connectionString = config.get<string>('DATABASE_URL');
     if (!connectionString) {
       throw new Error('DATABASE_URL is required');
