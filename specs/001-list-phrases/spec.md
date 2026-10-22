@@ -53,7 +53,7 @@ Como cliente de la lista, quiero recibir un error claro cuando los parámetros s
 **Escenarios de aceptación**:
 
 1. **Dado** `page=0`, `limit=101`, un valor no entero o un parámetro desconocido, **cuando** se consulta la lista, **entonces** se rechaza la solicitud con estado 400 y un error de validación legible.
-2. **Dado** que el origen de datos no está disponible, **cuando** se consulta la lista, **entonces** se informa estado 503 con un error de disponibilidad, sin presentarlo como lista vacía.
+2. **Dado** que el origen de datos no está disponible, **cuando** se consulta la lista, **entonces** se informa estado 500 con `DATABASE_ERROR`, sin presentarlo como lista vacía.
 3. **Dado** que ocurre un fallo interno inesperado, **cuando** se consulta la lista, **entonces** se informa estado 500, sin exponer información sensible.
 
 ### Casos límite
@@ -75,7 +75,7 @@ Como cliente de la lista, quiero recibir un error claro cuando los parámetros s
 - **FR-005**: El sistema DEBE admitir `page` como entero desde 1, con valor predeterminado 1, y `limit` como entero entre 1 y 100, con valor predeterminado 20.
 - **FR-006**: El sistema DEBE devolver como máximo `limit` frases correspondientes a la página solicitada; `total` DEBE representar todas las frases registradas y `totalPages` DEBE ser `ceil(total/limit)`, o 0 cuando `total=0`.
 - **FR-007**: El sistema DEBE rechazar con estado 400 los parámetros inválidos o ajenos al contrato, sin convertir silenciosamente valores no enteros a enteros válidos.
-- **FR-008**: Los errores de F001 DEBEN usar una respuesta `application/problem+json` con `title`, `status`, `detail` y `code`, y `errors: [{field, messages: string[]}]` opcional para fallos de validación, sin `timestamp` ni `traceId`. Los estados y códigos aplicables son 400/`VALIDATION_ERROR`, 500/`INTERNAL_ERROR`, 500/`INVALID_EMBEDDING` y 503/`DATABASE_UNAVAILABLE`. El error de embedding conserva su mensaje público mediante un filtro específico del controlador; los errores inesperados usan un mensaje genérico.
+- **FR-008**: Los errores de F001 DEBEN usar una respuesta `application/problem+json` con `title`, `status`, `detail` y `code`, y `errors: [{field, messages: string[]}]` opcional para fallos de validación, sin `timestamp` ni `traceId`. Los estados y códigos aplicables son 400/`VALIDATION_ERROR`, 500/`INTERNAL_ERROR`, 500/`INVALID_EMBEDDING` y 500/`DATABASE_ERROR`. El error de embedding conserva su mensaje público mediante un filtro específico del controlador; los errores inesperados usan un mensaje genérico.
 - **FR-009**: Ante una consulta fallida, el sistema DEBE informar el error sin devolver un resultado exitoso vacío ni revelar datos internos o secretos.
 - **FR-010**: F001 solo consulta frases registradas. No incluye registrar, validar, editar, eliminar, buscar, filtrar ni cambiar el orden.
 
@@ -112,7 +112,7 @@ Este trabajo se limita a dominio y sus pruebas; no modifica el contrato público
 
 ## Cambio de compatibilidad
 
-Por decisión del usuario se elimina el límite global de solicitudes. La API deja de generar 429/`RATE_LIMIT_EXCEEDED` por volumen de peticiones; el contrato local se actualiza a errores 400, 500 y 503.
+Por decisión del usuario se elimina el límite global de solicitudes. La API deja de generar 429/`RATE_LIMIT_EXCEEDED` por volumen de peticiones; el contrato local se actualiza a errores 400 y 500.
 
 ## Decisiones de revisión — 2026-10-22
 
@@ -121,6 +121,11 @@ Estas decisiones del usuario prevalecen sobre las indicaciones anteriores para e
 - Mantener el agregado completo y los mappers existentes para el listado; no incorporar `PhraseListItem` ni `PhraseFactory` ahora.
 - Proteger texto normalizado, modelo y fecha mediante value objects básicos: `NormalizedPhraseText` exige string no vacío tras trim; `PhraseModel` exige id y versión no vacíos tras trim; `PhraseCreatedAt` exige Date válido y protege la fecha con copias defensivas. Se conservan las cadenas originales sin imponer formatos ni rangos temporales.
 - Conservar la validación numérica actual de paginación y `Embedding(number[])`; posponer el endurecimiento léxico y la firma readonly.
-- Conservar los errores originales PostgreSQL como 500 genérico sin incorporar traducción a 503.
+- Conservar los errores originales PostgreSQL como 500/`DATABASE_ERROR` con causa conservada y registro seguro en el backend.
 - Usar únicamente los tres errores concretos `InvalidPhraseError`, `InvalidPhraseTextError` e `InvalidEmbeddingError` y sus respectivos filtros HTTP en infraestructura: 500 con códigos `INVALID_PHRASE`, `INVALID_PHRASE_TEXT` e `INVALID_EMBEDDING` y mensajes públicos seguros.
 - Agregar pruebas nuevas solo de casos de uso y corregir las existentes, sin crear suites de DTO ni de value objects.
+
+
+## Unificación de errores de BD — 2026-10-22
+
+Esta revisión sustituye la clasificación anterior de disponibilidad de BD: todo fallo de conexión, SQL o restricciones en consultas, inserciones o actualizaciones devuelve 500/`DATABASE_ERROR` con el mensaje «Ocurrió un error de base de datos.». El backend conserva la causa y la registra con el stack una sola vez; la respuesta no expone SQL, trazas ni datos internos. Los errores de dominio, aplicación y mapeo conservan su tratamiento; IA conserva 503/`AI_UNAVAILABLE`. Cambio incompatible para clientes que esperaban 503/`DATABASE_UNAVAILABLE`.

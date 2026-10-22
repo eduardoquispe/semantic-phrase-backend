@@ -43,7 +43,7 @@ Todos usan `application/problem+json` con `title`, `status`, `detail` y `code` o
 | 500 | `INVALID_PHRASE` | Identidad, metadatos o fecha de una frase persistida inválidos; mensaje público del dominio |
 | 500 | `INVALID_PHRASE_TEXT` | Texto de una frase persistida inválido; mensaje público del dominio |
 | 500 | `INVALID_EMBEDDING` | Embedding inválido detectado durante el listado; `detail` contiene el mensaje público del error de dominio |
-| 503 | `DATABASE_UNAVAILABLE` | PostgreSQL no disponible para la consulta |
+| 500 | `DATABASE_ERROR` | Fallo de conexión, SQL o restricciones durante la consulta |
 
 Ejemplo ilustrativo de validación:
 
@@ -67,6 +67,6 @@ El controlador registra `InvalidEmbeddingFilter`, basado en `DomainExceptionFilt
 
 Se conservan los mappers y la reconstrucción del agregado completo. Los tres errores concretos de dominio son `InvalidPhraseError`, `InvalidPhraseTextError` e `InvalidEmbeddingError`, cada uno con un filtro HTTP específico registrado en el controlador. Todos devuelven 500: el listado no recibe campos de frase del cliente. Sus mensajes describen la regla sin incluir el contenido rechazado. Los clientes deben admitir los nuevos códigos `INVALID_PHRASE` e `INVALID_PHRASE_TEXT`.
 
-Por decisión del usuario no se incorpora clasificación de errores PostgreSQL: los errores originales de conexión o consulta llegan al filtro global como 500/`INTERNAL_ERROR`. El tratamiento existente de un `DatabaseUnavailableError` explícito como 503 se conserva, pero el repositorio actual no genera ese error.
+Los fallos de conexión, SQL y restricciones se traducen a 500/`DATABASE_ERROR` con el mensaje «Ocurrió un error de base de datos.». Los repositorios generan `DatabaseError` con su causa original, y el filtro global la registra una sola vez junto al stack.
 
 Se mantiene la conversión numérica actual de la query: la validación léxica decimal estricta queda pospuesta. Por ejemplo, `page=1e2` se convierte a 100; no se añade comprobación de entero seguro en esta revisión.

@@ -1,4 +1,10 @@
 import {
+  CreatePhrasePort,
+  REGISTRATION_MODEL,
+} from './application/ports/inbound/create-phrase.port';
+import { CreatePhraseUseCase } from './application/use-cases/create-phrase.use-case';
+import { PhraseModel } from './domain/value-objects/phrase-model.value-object';
+import {
   ValidatePhrasePort,
   VALIDATION_SETTINGS,
 } from './application/ports/inbound/validate-phrase.port';
@@ -21,6 +27,17 @@ import { DrizzlePhraseValidationRepository } from './infrastructure/persistence/
   imports: [DatabaseModule],
   controllers: [PhrasesController, PhraseValidationsController],
   providers: [
+    CreatePhraseUseCase,
+    { provide: CreatePhrasePort, useExisting: CreatePhraseUseCase },
+    {
+      provide: REGISTRATION_MODEL,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new PhraseModel(
+          config.getOrThrow<string>('AI_MODEL'),
+          config.getOrThrow<string>('AI_EMBEDDING_VERSION'),
+        ),
+    },
     {
       provide: VALIDATION_SETTINGS,
       inject: [ConfigService],

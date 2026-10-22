@@ -45,6 +45,6 @@ Desde `apps/backend`, aplicar la migración Drizzle de F001 con `DATABASE_URL=po
 
 3. Consultar `?page=4`. Esperar 200, `data` vacío, `page=4`, `total=45` y `totalPages=3`.
 4. Consultar `?page=0`, `?limit=101`, `?page=1.5` y `?unexpected=1`. Esperar 400, `application/problem+json` y `VALIDATION_ERROR`. Repetir con claves duplicadas y números que pierdan precisión.
-5. Detener la base después de una consulta correcta y volver a consultar. Esperar 503, `application/problem+json` y `DATABASE_UNAVAILABLE`, nunca 200 con una lista vacía. Reiniciar la base al terminar.
+5. Detener la base después de una consulta correcta y volver a consultar. Esperar 500, `application/problem+json` y `DATABASE_ERROR`, nunca 200 con una lista vacía. Reiniciar la base al terminar.
 
 Ejecutar `pnpm run build`, `pnpm test` y `pnpm run test:e2e`. La suite E2E debe comprobar el contrato HTTP con resultados y fallos controlados del repositorio; la comprobación manual verifica migración y SQL reales.

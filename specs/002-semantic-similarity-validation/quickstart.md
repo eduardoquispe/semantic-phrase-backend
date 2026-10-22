@@ -69,7 +69,7 @@ curl -i http://localhost:3000/api/v1/phrase-validations \
 
 201 con data.validationId/expiresAt/requiresConfirmation/match. Empty: match null;
 textual: score null y confirmación; vector: una candidata incluso bajo umbral.
-No imprimir tokens en evidencia. 400 para entrada inválida; 503 para SDK/DB conocida;
+No imprimir tokens en evidencia. 400 para entrada inválida; 503 para SDK; 500 DATABASE_ERROR para fallos de BD;
 500 para incompatible/SQL inesperado. Ninguna solicitud registra phrases.
 
 Para integración, usar base temporal aislada, aplicar migraciones existentes y

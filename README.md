@@ -1,6 +1,6 @@
 # Semantic Phrase API
 
-NestJS API for the shared phrase list. F001 exposes `GET /api/v1/phrases`.
+NestJS API for the shared phrase list, semantic validation and confirmed registration.
 
 ## Local setup
 
@@ -22,7 +22,7 @@ Migrations run only when requested. `pnpm run db:generate` generates a new Drizz
 
 ## API
 
-`GET /api/v1/phrases?page=1&limit=20` returns `data` with `id`, `text`, and `createdAt`, plus `meta` with `page`, `limit`, `total`, and `totalPages`. `page` starts at 1, `limit` ranges from 1 to 100, and only decimal digits are accepted. Invalid query input returns 400; database unavailability returns 503; unexpected failures return 500. Errors use `application/problem+json`.
+`GET /api/v1/phrases?page=1&limit=20` returns `data` with `id`, `text`, and `createdAt`, plus `meta` with `page`, `limit`, `total`, and `totalPages`. `page` starts at 1, `limit` ranges from 1 to 100, and only decimal digits are accepted. Invalid query input returns 400; database operation failures return 500 / `DATABASE_ERROR`; unexpected failures return 500. Errors use `application/problem+json`.
 
 ## Checks
 
@@ -84,20 +84,82 @@ Coincidencia textual: `match={type:"textual_exact",phrase:{id,text},similaritySc
 confirmación obligatoria. Coincidencia vectorial: `type:"vector"` y score coseno
 entre -1 y 1; la candidata también se devuelve bajo el umbral. El umbral es inclusivo.
 Errores Problem Details: 400 `VALIDATION_ERROR` con `errors[].messages[]`,
-503 `AI_UNAVAILABLE`/`DATABASE_UNAVAILABLE` y 500 `INTERNAL_ERROR` para incompatibilidad,
+503 `AI_UNAVAILABLE`, 500 `DATABASE_ERROR` y 500 `INTERNAL_ERROR` para incompatibilidad,
 SQL inesperado. No se aplica throttle en validación.
 
 Una validación expira cuando `now >= expiresAt`. Fila y respuesta comparten
 la misma fecha; el UUID no autentica personas. Revalidar crea otra identidad sin
 prorrogar ni consumir la anterior. Abandono y expiración no eliminan la fila;
 la limpieza es manual. Validar no congela el corpus.
-Registro y consumo pertenecen a otra funcionalidad y no están implementados aquí.
+Registro y consumo se implementan en F003, descrito a continuación.
 
 Cambio incompatible (2026-10-22): `validationId` sustituye a `validationToken`, sin alias.
 Se devuelve el UUID v4 aleatorio de la validación persistida, sin firma ni JWT.
 Los JWT anteriores dejan de formar parte del contrato; las filas existentes pueden
 referenciarse por su UUID. No hay migración ni secreto de firma requerido.
-El registro queda fuera de F002: deberá buscar por `validationId`, comprobar
-vigencia (`now >= expiresAt` implica expiración), texto, confirmación y estado no
-consumido, y consumir la validación atómicamente con el guardado de la frase.
+F003 busca por `validationId`, comprueba vigencia (`now >= expiresAt` implica
+expiración), texto exacto, modelo/versión, confirmación y estado no consumido, y
+guarda la frase y después consume la validación mediante dos escrituras secuenciales.
 TTL configurable inicialmente de 15 minutos; respuesta y fila comparten expiración.
+
+
+## Registro con confirmación HITL (F003)
+
+Después de validar mediante `POST /api/v1/phrase-validations`, enviar el mismo
+original y el UUID recibido a `POST /api/v1/phrases`:
+
+```sh
+curl -i http://localhost:3000/api/v1/phrases \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Me gusta viajar a Cusco","validationId":"550e8400-e29b-41d4-a716-446655440000","confirmed":true}'
+```
+
+El UUID de ejemplo debe sustituirse por el de una validación vigente. Si
+`requiresConfirmation` es false, `confirmed` puede omitirse o ser false/true.
+Ante una alerta almacenada solo true permite registrar; cadenas, números y null
+se rechazan. Cancelar significa no enviar este POST y no crea ninguna frase.
+
+Éxito 201, con únicamente estos campos públicos:
+
+```json
+{
+  "data": {
+    "id": "123e4567-e89b-42d3-a456-426614174000",
+    "text": "Me gusta viajar a Cusco",
+    "createdAt": "2026-10-22T19:02:00.000Z"
+  }
+}
+```
+
+El registro admite el mismo texto de 1–280 puntos de código de F002, incluidos
+signos, emojis y espacios externos; no admite controles Cc, campos adicionales
+ni query. La lectura histórica de hasta 500 puntos de código se conserva.
+No hay límite global por volumen. No se generan nuevos embeddings ni se busca
+otra coincidencia: se copian el original, normalizado, vector y modelo guardados.
+
+Errores `application/problem+json`:
+
+| Estado | Código | Causa |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Texto, booleano, body o query inválidos; `errors[].messages[]` por campo |
+| 400 | `INVALID_VALIDATION_ID` | Referencia ausente, no UUID v4 o inexistente |
+| 400 | `PHRASE_MISMATCH` | Original diferente, aunque sea equivalente tras normalizar |
+| 409 | `CONFIRMATION_REQUIRED` | Alerta almacenada sin true; permite reintentar con true |
+| 409 | `VALIDATION_EXPIRED` | Se alcanzó la expiración; requiere volver a validar |
+| 409 | `VALIDATION_ALREADY_USED` | Consumo previo observado al leer el comprobante |
+| 500 | `INTERNAL_ERROR` | Modelo/versión incompatible o fallo inesperado, sin detalles internos |
+| 500 | `DATABASE_ERROR` | Fallo de conexión, consulta o escritura en persistencia |
+
+Primero se inserta la frase y después se actualiza consumedAt del comprobante.
+No hay transacción ni compensación: si falla la inserción no se intenta el consumo;
+si falla el consumo, se propaga el error y la frase permanece insertada.
+Solicitudes concurrentes pueden crear varias frases con la misma validación.
+Un reintento tras un fallo de consumo también puede duplicar la frase. Dos validaciones
+distintas pueden registrar el mismo texto. Eliminar manualmente una validación
+no elimina la frase: no se mantiene una asociación histórica obligatoria.
+No se requieren dependencias, tablas, migraciones ni variables nuevas.
+
+El alcance y la evidencia de verificación están en
+[F003 quickstart](specs/003-register-phrases-hitl/quickstart.md).
+
+Los fallos de conexión, SQL y restricciones se traducen globalmente a 500 / `DATABASE_ERROR` con `detail: "Ocurrió un error de base de datos."`. El backend conserva la causa y la registra con el stack una sola vez; no se incluyen detalles internos en Problem Details. Esto sustituye 503 / `DATABASE_UNAVAILABLE` y requiere ajustar clientes que dependían de ese estado o código. Los errores del servicio de IA conservan 503 / `AI_UNAVAILABLE`.

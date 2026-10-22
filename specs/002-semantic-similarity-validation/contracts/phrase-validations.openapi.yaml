@@ -98,17 +98,25 @@ paths:
                 code: VALIDATION_ERROR
                 errors: [{ field: text, messages: ['Máximo 280 caracteres.'] }]
         '500':
-          description: Fallo inesperado, emisión fallida del token o corpus sin vectores compatibles y sin igualdad textual
+          description: Fallo de BD, fallo inesperado, emisión fallida del token o corpus sin vectores compatibles y sin igualdad textual
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
-              example:
-                title: Internal Server Error
-                status: 500
-                detail: Ocurrió un error interno.
-                code: INTERNAL_ERROR
+              examples:
+                internal:
+                  value:
+                    title: Internal Server Error
+                    status: 500
+                    detail: Ocurrió un error interno.
+                    code: INTERNAL_ERROR
+                database:
+                  value:
+                    title: Internal Server Error
+                    status: 500
+                    detail: Ocurrió un error de base de datos.
+                    code: DATABASE_ERROR
         '503':
-          description: Servicio de embeddings no disponible, comunicación o inferencia fallida, respuesta malformada, timeout o vector inválido; o indisponibilidad conocida de datos
+          description: Servicio de embeddings no disponible, comunicación o inferencia fallida, respuesta malformada, timeout o vector inválido
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
@@ -120,14 +128,6 @@ paths:
                       status: 503,
                       detail: El servicio de IA no está disponible.,
                       code: AI_UNAVAILABLE,
-                    }
-                database:
-                  value:
-                    {
-                      title: Service Unavailable,
-                      status: 503,
-                      detail: La base de datos no está disponible.,
-                      code: DATABASE_UNAVAILABLE,
                     }
 components:
   schemas:
@@ -230,7 +230,7 @@ components:
               VALIDATION_ERROR,
               INTERNAL_ERROR,
               AI_UNAVAILABLE,
-              DATABASE_UNAVAILABLE,
+              DATABASE_ERROR,
             ]
         errors:
           type: array

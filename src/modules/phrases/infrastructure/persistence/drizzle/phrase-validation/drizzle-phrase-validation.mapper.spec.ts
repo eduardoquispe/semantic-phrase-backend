@@ -17,7 +17,9 @@ function validationProps(): PhraseValidationProps {
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     model: new PhraseModel(teiConfig.AI_MODEL, teiConfig.AI_EMBEDDING_VERSION),
     match: null,
-    threshold: 0.85,
+    normalizedText: 'hola',
+    requiresConfirmation: false,
+    consumedAt: null,
     createdAt: new Date('2026-10-22T12:00:00Z'),
     expiresAt: new Date('2026-10-22T12:15:00Z'),
   };
@@ -26,6 +28,33 @@ function validationProps(): PhraseValidationProps {
 import { SimilarityScore } from '../../../../domain/value-objects/similarity-score.value-object';
 import { ValidationMatchEnum } from '../../../../domain/enums/validation-match.enum';
 describe('DrizzlePhraseValidationMapper', () => {
+  it('maps partial changes without clearing omitted fields or changing identity', () => {
+    const consumedAt = new Date();
+    expect(
+      DrizzlePhraseValidationMapper.toPartialPersistence({ id, consumedAt }),
+    ).toEqual({ consumedAt });
+    expect(
+      DrizzlePhraseValidationMapper.toPartialPersistence({
+        consumedAt: null,
+        match: null,
+        requiresConfirmation: false,
+      }),
+    ).toEqual({
+      consumedAt: null,
+      matchedPhraseId: null,
+      similarityScore: null,
+      requiresConfirmation: false,
+    });
+  });
+  it('maps all editable fields with their persistence representations', () => {
+    const validation = new PhraseValidation(validationProps());
+    const { id: ignoredId, ...expected } =
+      DrizzlePhraseValidationMapper.toPersistence(validation);
+    expect(ignoredId).toBe(id);
+    expect(
+      DrizzlePhraseValidationMapper.toPartialPersistence(validation),
+    ).toEqual(expected);
+  });
   it.each([null, -0.7, 0.9])(
     'maps exact original, embedding, model and dates (%s)',
     (score) => {
@@ -36,6 +65,7 @@ describe('DrizzlePhraseValidationMapper', () => {
           phrase: { id: props.id.value, text: 'Candidate' },
           similarityScore: new SimilarityScore(score),
         });
+      props.requiresConfirmation = score !== null && score >= 0.85;
       const v = new PhraseValidation(props);
       const row = DrizzlePhraseValidationMapper.toPersistence(v);
       expect(row).toEqual({
@@ -54,4 +84,49 @@ describe('DrizzlePhraseValidationMapper', () => {
       });
     },
   );
+});
+
+describe('stored validation mapping', () => {
+  it('preserves a pending validation without reevaluating stored similarity', () => {
+    const props = validationProps();
+    const result = DrizzlePhraseValidationMapper.toDomain({
+      id: props.id.value,
+      text: props.text.value,
+      normalizedText: 'stored',
+      embedding: JSON.stringify(props.embedding.values),
+      modelId: props.model.id,
+      modelVersion: props.model.version,
+      matchedPhraseId: id,
+      similarityScore: 1,
+      requiresConfirmation: false,
+      createdAt: props.createdAt,
+      expiresAt: props.expiresAt,
+      consumedAt: null,
+    });
+    expect(result.requiresConfirmation).toBe(false);
+    expect(result.match).toBeNull();
+    expect(result.consumedAt).toBeNull();
+  });
+  it('preserves stored alert, normalized text and consumed time without recomputing', () => {
+    const row = DrizzlePhraseValidationMapper.toPersistence(
+      new PhraseValidation(validationProps()),
+    );
+    const consumedAt = new Date('2026-10-22T12:01:00Z');
+    const result = DrizzlePhraseValidationMapper.toDomain({
+      ...row,
+      requiresConfirmation: true,
+      consumedAt,
+      normalizedText: 'preserved',
+    } as Parameters<typeof DrizzlePhraseValidationMapper.toDomain>[0]);
+    expect(result).toBeInstanceOf(PhraseValidation);
+    expect(result.match).toBeNull();
+    expect(result.createdAt).toEqual(row.createdAt);
+    expect(result.requiresConfirmation).toBe(true);
+    expect(result.normalizedText).toBe('preserved');
+    expect(result.consumedAt).toEqual(consumedAt);
+    expect(result.text.value).toBe(' Hola ');
+    expect(result.embedding.values).toEqual(Array<number>(384).fill(0.25));
+    expect(result.model.id).toBe(teiConfig.AI_MODEL);
+    expect(result.expiresAt).toEqual(row.expiresAt);
+  });
 });

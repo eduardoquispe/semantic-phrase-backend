@@ -172,7 +172,7 @@ Los nombres de campos corresponden al contrato externo aprobado, con las excepci
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 400 / `VALIDATION_ERROR`     | Entrada inválida o campos/parámetros ajenos al contrato; detalles por campo cuando corresponda.                                                      |
 | 503 / `AI_UNAVAILABLE`       | Servicio de embeddings no disponible, fallo de comunicación o inferencia, respuesta malformada, representación semántica inválida o timeout técnico. |
-| 503 / `DATABASE_UNAVAILABLE` | Indisponibilidad conocida del origen de datos al consultar o conservar la validación.                                                                |
+| 500 / `DATABASE_ERROR` | Fallo de conexión, SQL o restricciones al consultar o conservar la validación.                                                                |
 | 500 / `INTERNAL_ERROR`       | Fallo inesperado, colección no vacía sin coincidencia textual ni representaciones compatibles.                                                       |
 
 Ejemplo de rechazo: `{ "title": "Bad Request", "status": 400, "detail": "Los datos enviados no son válidos.", "code": "VALIDATION_ERROR", "errors": [{ "field": "text", "messages": ["Máximo 280 caracteres."] }] }`.
@@ -256,16 +256,21 @@ La especificación local de F001 se consultó únicamente para detectar incompat
 ### Decisiones HITL — 2026-10-22
 
 - **Q1 resuelta**: el usuario indicó «haz caso a la arquitectura, la entrada que sea de 280 caracteres». Se adopta `model-decision.md` como fuente alternativa y la arquitectura para el comportamiento de F002, con límite máximo de 280 conservando el cómputo arquitectónico en puntos de código Unicode. Se mantienen la conservación temporal de validaciones, el puntaje textual nulo, la devolución de candidata bajo umbral y la ausencia de garantía histórica permanente. No se exige que el texto contenga letras.
-- **Q2-A aprobada**: sin límite global ni 429 por volumen; errores por campo mediante `messages[]`; indisponibilidad conocida de datos como 503 y fallos inesperados como 500; pruebas unitarias y HTTP según la constitución.
+- **Q2-A aprobada**: sin límite global ni 429 por volumen; errores por campo mediante `messages[]`; fallos de datos como 500/`DATABASE_ERROR` y fallos inesperados como 500; pruebas unitarias y HTTP según la constitución.
 - **Q3-A aprobada, precisada en Clarifications**: una colección no vacía sin coincidencia textual ni representaciones compatibles causa fallo técnico controlado, sin comprobante utilizable y sin comunicar ausencia de coincidencias. Se usa 500/`INTERNAL_ERROR` sin añadir un código de error nuevo.
 - **Cambio de ejecución solicitado**: el modelo deja el proceso de NestJS y se reutiliza el servicio Docker existente mediante LangChain y URL por entorno. Esta instrucción sustituye la carga local, caché y ciclo de vida del modelo dentro de NestJS descritos en el bloque 04 y en los artefactos técnicos actuales; conserva los demás requisitos y los puertos existentes.
 
 ### Compatibilidad y límites documentales
 
-Para F002, las decisiones anteriores prevalecen sobre las fuentes discrepantes. Frente a OpenAPI y al bloque 06, se reduce el máximo de entrada de 500 a 280 puntos de código, se elimina la respuesta 429 por volumen y se sustituye `errors[].message` por `errors[].messages`. Q3 precisa el caso de incompatibilidad sin modificar las variantes de éxito. La clasificación 503 de indisponibilidad conocida se conserva para F002 aunque F001 haya pospuesto esa traducción.
+Para F002, las decisiones anteriores prevalecen sobre las fuentes discrepantes. Frente a OpenAPI y al bloque 06, se reduce el máximo de entrada de 500 a 280 puntos de código, se elimina la respuesta 429 por volumen y se sustituye `errors[].message` por `errors[].messages`. Q3 precisa el caso de incompatibilidad sin modificar las variantes de éxito. Los fallos de BD de F001, F002 y F003 se unifican en 500/`DATABASE_ERROR`; IA conserva 503/`AI_UNAVAILABLE`.
 
 Estas diferencias se documentaron antes de implementar. El contrato compartido ya estaba alineado en el baseline. La implementación conserva la lectura de frases históricas hasta 500 puntos de código.
 
 El cambio al servicio Docker no altera rutas, entrada, respuestas, errores públicos, comprobantes, vigencia, umbral ni reglas de pgvector. Los artefactos técnicos y el código se alinearon durante implementación con OpenAIEmbeddings y el adaptador mínimo aprobado, sin pipeline local.
 
 Las decisiones no incorporan guardado ni auditoría permanente a F002, ni autorizan una mejora de calidad semántica. El timeout sigue siendo configurable sin default aprobado; perfil, identidad y entorno de medición comprobados se registran en quickstart.md.
+
+
+## Unificación de errores de BD — 2026-10-22
+
+Esta revisión sustituye la clasificación anterior de disponibilidad de BD: todo fallo de conexión, SQL o restricciones en consultas, inserciones o actualizaciones devuelve 500/`DATABASE_ERROR` con el mensaje «Ocurrió un error de base de datos.». El backend conserva la causa y la registra con el stack una sola vez; la respuesta no expone SQL, trazas ni datos internos. Los errores de dominio, aplicación y mapeo conservan su tratamiento; IA conserva 503/`AI_UNAVAILABLE`. Cambio incompatible para clientes que esperaban 503/`DATABASE_UNAVAILABLE`.

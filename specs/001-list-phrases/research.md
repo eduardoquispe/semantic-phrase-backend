@@ -4,7 +4,7 @@ El backend sigue siendo el proyecto inicial de NestJS. Estas decisiones concilia
 
 ## Límite de la API
 
-- **Decisión**: Exponer solo `GET /api/v1/phrases` sin autenticación para F001, con `PhraseListEnvelope` y las respuestas de error 400, 500 y 503.
+- **Decisión**: Exponer solo `GET /api/v1/phrases` sin autenticación para F001, con `PhraseListEnvelope` y las respuestas de error 400 y 500.
 - **Motivo**: El OpenAPI aprobado es el contrato externo. F001 excluye crear, validar, editar, borrar, buscar y filtrar.
 - **Alternativas consideradas**: Un controlador CRUD genérico o un esquema externo propio ampliarían o duplicarían el contrato aprobado.
 
@@ -28,8 +28,8 @@ El backend sigue siendo el proyecto inicial de NestJS. Estas decisiones concilia
 
 ## Validación HTTP y errores
 
-- **Decisión**: Usar `ValidationPipe` global con `whitelist` y `forbidNonWhitelisted`, conversión controlada de query, un filtro compartido Problem Details. Traducir indisponibilidad de base de datos a `DATABASE_UNAVAILABLE` 503 y ocultar fallos inesperados mediante `INTERNAL_ERROR` 500.
-- **Motivo**: Se retira el límite de solicitudes por decisión del usuario; F001 contempla 400, 500 y 503. Una consulta fallida no puede presentarse como lista vacía.
+- **Decisión**: Usar `ValidationPipe` global con `whitelist` y `forbidNonWhitelisted`, conversión controlada de query, un filtro compartido Problem Details. Traducir fallos de conexión, SQL y restricciones de base de datos a `DATABASE_ERROR` 500 y ocultar fallos inesperados mediante `INTERNAL_ERROR` 500.
+- **Motivo**: Se retira el límite de solicitudes por decisión del usuario; F001 contempla 400 y 500. Una consulta fallida no puede presentarse como lista vacía.
 - **Alternativas consideradas**: Los errores predeterminados de Nest o capturar fallos y devolver vacío incumplirían el contrato.
 
 ## Configuración y comprobación

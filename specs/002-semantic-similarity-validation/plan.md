@@ -75,8 +75,8 @@ reiniciar. /info no certifica criptográficamente los pesos ni los prompts.
 4. Colección vacía: match null. Colección incompatible sin texto igual: 500 seguro.
 5. Guardar validación temporal antes de devolver validationId; responder 201 solo después.
    No insertar phrases, consumir ni renovar comprobantes.
-6. Error SDK/Embedding: 503 AI_UNAVAILABLE. DB conocida: 503; SQL inesperado,
-   incompatible: 500.
+6. Error SDK/Embedding: 503 AI_UNAVAILABLE. BD (conexión, SQL o restricciones): 500 DATABASE_ERROR;
+   incompatible: 500 INTERNAL_ERROR.
 
 Conservar Unicode 1–280 para validar, hasta 500 para lectura histórica F001,
 confirmación inclusiva, una candidata incluso bajo umbral, referencia UUID persistida,

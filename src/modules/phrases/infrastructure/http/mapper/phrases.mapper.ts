@@ -1,3 +1,4 @@
+import { CreatePhraseResponseDto } from '../dtos/create-phrase-response.dto';
 import type { ValidatePhraseResult } from '../../../application/ports/inbound/validate-phrase.port';
 import { PhraseValidationResponseDto } from '../dtos/phrase-validation-response.dto';
 import { Phrase } from '../../../domain/entities/phrase.entity';
@@ -5,6 +6,15 @@ import { ListPhrasesResponseDto } from '../dtos/list-phrases-response.dto';
 import { ListPhrasesResult } from '../../../application/ports/inbound/list-phrases.port';
 
 export class PhrasesMapper {
+  static toCreatePhraseResponse(phrase: Phrase): CreatePhraseResponseDto {
+    return {
+      data: {
+        id: phrase.id,
+        text: phrase.text.value,
+        createdAt: phrase.createdAt.toISOString(),
+      },
+    };
+  }
   static toValidationResponse(
     result: ValidatePhraseResult,
   ): PhraseValidationResponseDto {

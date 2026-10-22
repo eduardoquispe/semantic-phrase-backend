@@ -68,18 +68,18 @@
 
 **Objetivo**: devolver errores Problem Details seguros y distinguibles para validación, límite de solicitudes, indisponibilidad de base de datos y fallos inesperados.
 
-**Prueba independiente**: `page=0`, `limit=101`, decimales, claves desconocidas o repetidas devuelven 400; un repositorio indisponible devuelve 503 y un fallo inesperado devuelve 500, todos con `application/problem+json`.
+**Prueba independiente**: `page=0`, `limit=101`, decimales, claves desconocidas o repetidas devuelven 400; un fallo de BD devuelve 500/`DATABASE_ERROR` y un fallo inesperado devuelve 500, todos con `application/problem+json`.
 
 ### Pruebas de la historia 3
 
 - [X] T021 [P] [US3] Probar sintaxis decimal, rangos, valores vacíos, signos, exponentes, duplicados, claves desconocidas y enteros inseguros en `src/modules/phrases/infrastructure/inbound/http/dtos/list-phrases.query.dto.spec.ts`.
-- [X] T022 [P] [US3] Ampliar `test/phrases.e2e-spec.ts` para 400, 500 y 503; verificar `Content-Type: application/problem+json`, `title`, `status`, `detail`, `code`, `errors` de validación y ausencia de detalles internos.
+- [X] T022 [P] [US3] Ampliar `test/phrases.e2e-spec.ts` para 400 y 500; verificar `Content-Type: application/problem+json`, `title`, `status`, `detail`, `code`, `errors` de validación y ausencia de detalles internos.
 
 ### Implementación de la historia 3
 
 - [X] T023 [US3] Rechazar en `src/modules/phrases/infrastructure/inbound/http/dtos/list-phrases.query.dto.ts` toda sintaxis o rango inválido y evitar conversiones permisivas; detectar claves desconocidas y repetidas en `src/modules/phrases/infrastructure/inbound/http/controllers/phrases.controller.ts` usando la query original.
 - [X] T024 [US3] Integrar los errores del `ValidationPipe` global con `src/shared/infrastructure/http/filters/problem-details.filter.ts` para que las respuestas 400 incluyan `VALIDATION_ERROR` y los campos inválidos sin exponer detalles internos; mantener la conversión estricta de `page` y `limit`.
-- [X] T025 [P] [US3] Crear `src/shared/infrastructure/http/filters/problem-details.filter.ts` para traducir 400/`VALIDATION_ERROR`, 500/`INTERNAL_ERROR` y 503/`DATABASE_UNAVAILABLE` al contrato `application/problem+json` sin SQL, trazas ni secretos.
+- [X] T025 [P] [US3] Crear `src/shared/infrastructure/http/filters/problem-details.filter.ts` para traducir 400/`VALIDATION_ERROR`, 500/`INTERNAL_ERROR` y 500/`DATABASE_ERROR` al contrato `application/problem+json` sin SQL, trazas ni secretos.
 - [X] T026 [US3] Distinguir indisponibilidad de PostgreSQL de otros errores en `src/modules/phrases/infrastructure/outbound/persistence/repositories/drizzle-phrase.repository.ts` y expresar el fallo sin códigos HTTP mediante `src/shared/infrastructure/database/errors/database-unavailable.error.ts`.
 - [X] T027 [US3] Registrar el filtro Problem Details para toda la API en `src/main.ts`. El límite global de solicitudes se retiró por decisión del usuario.
 
@@ -139,7 +139,7 @@ Los marcadores `[P]` indican archivos distintos y ausencia de dependencia pendie
 1. Completar preparación y fundamentos; aplicar la migración manualmente.
 2. Entregar US1 como MVP y comprobar su respuesta sin parámetros con datos conocidos y base vacía.
 3. Agregar US2 y verificar cada página de un conjunto de 45 frases.
-4. Agregar US3 y verificar 400, 500 y 503 conforme al contrato.
+4. Agregar US3 y verificar 400 y 500 conforme al contrato.
 5. Ejecutar compilación, pruebas automatizadas y comprobación real con PostgreSQL.
 
 
@@ -154,7 +154,7 @@ Evaluación centrada en estructura, distribución de responsabilidades y lógica
 - [X] T042 — F3: Implementar las reglas aprobadas con `NormalizedPhraseText`, `PhraseModel` (id y versión) y `PhraseCreatedAt`: strings no vacíos tras trim sin modificar el valor original y Date con timestamp finito y copias defensivas. Componer estos value objects desde el constructor de `Phrase`, sin bucles, jerarquías, validadores genéricos ni restricciones adicionales; conservar la API pública y corregir las pruebas existentes, per spec: decisiones de revisión y aprobación del usuario (partial).
 - T043 — F4: No ejecutar por decisión del usuario: conservar la construcción actual; no incorporar `PhraseFactory` en esta fase.
 - T044 — F5: No ejecutar por decisión del usuario: conservar por ahora la validación y paginación actuales; no aplicar el endurecimiento propuesto en esta revisión.
-- T045 — F6: No ejecutar por decisión del usuario: conservar los errores originales PostgreSQL como 500 genérico; no incorporar clasificación ni traducción a `DatabaseUnavailableError` en el repositorio.
+- T045 — F6: Actualizado por la unificación de BD: capturar fallos de consultas y escrituras como `DatabaseError`, sin clasificar códigos y conservando la causa.
 - [X] T046 — F7: Actualizar únicamente `drizzle.config.ts` para apuntar al esquema existente `src/modules/phrases/infrastructure/persistence/drizzle/drizzle-phrases.model.ts`; conservar la organización actual de adaptadores y las migraciones, según decisión del usuario (contradicts).
 - [X] T047 — F8: Conservar únicamente `InvalidPhraseError`, `InvalidPhraseTextError` e `InvalidEmbeddingError` como errores concretos de dominio, con la base `DomainError`. Mantener los filtros de frase y embedding e incorporar `InvalidPhraseTextFilter` en infraestructura, registrando los tres en el controlador con HTTP 500 y códigos específicos. Documentar los códigos y verificar los tres mediante la prueba HTTP existente parametrizada, según aprobación del usuario y spec: decisiones de revisión (unrequested).
 - T048 — F9: Pospuesto por decisión del usuario: conservar por ahora la firma actual de `Embedding`; no ampliar a `readonly number[]` en esta fase.

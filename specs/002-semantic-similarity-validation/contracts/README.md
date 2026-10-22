@@ -13,7 +13,7 @@ El YAML compartido fue alineado durante T001: validación usa 280 puntos de cód
 | `POST /phrase-validations.responses`         | Solo 201, 400, 500 y 503; quitar 429 de esta operación                                                                                                                                   |
 | `POST /phrase-validations.description`       | Explicitar incompatibilidad sin coincidencia textual como 500, colección vacía como éxito; textual prima y sigue requiriendo embedding válido                                            |
 | `FieldError`                                 | Reemplazar `message:string` por `messages:string[]`, ambos `field` y `messages` obligatorios; actualizar ejemplos compartidos para representar el formato ya implementado por el backend |
-| 503 de validación                            | Documentar ejemplos `AI_UNAVAILABLE` y `DATABASE_UNAVAILABLE`; no clasificar SQL inesperado como disponibilidad                                                                          |
+| 503 de validación                            | Documentar solo `AI_UNAVAILABLE`; documentar `DATABASE_ERROR` en 500 para conexión, SQL y restricciones                                                                          |
 | Respuesta 201                                | Mantener shape existente; añadir ejemplo vectorial bajo umbral con `requiresConfirmation=false`                                                                                          |
 
 No eliminar 429 de otras operaciones ni cambiar sus contratos en este trabajo por asociación con F002. El backend actual no tiene throttle y F002 no lo añadirá. El cambio de `FieldError` es compartido porque el código existente ya usa `messages[]`; verificar regresión HTTP de F001, sin introducir un segundo formato por ruta. No añadir códigos de guardado al contrato reducido de F002.
@@ -33,6 +33,6 @@ Validación: revisar referencias locales y ejemplos del YAML, comparar manualmen
 
 ## Transición a inferencia en Docker
 
-El contrato público permanece compatible: misma ruta, campos y estados 201/400/500/503. El servicio interno TEI y su identidad se definen en [embeddings-service.md](embeddings-service.md). Fallos de comunicación, HTTP remoto, formato, vector o timeout se traducen a 503 `AI_UNAVAILABLE`; un 429 remoto no añade una respuesta pública 429 ni activa retries.
+La ruta, los campos y los estados posibles 201/400/500/503 se conservan. La unificación de BD cambia la respuesta que antes era 503/`DATABASE_UNAVAILABLE` a 500/`DATABASE_ERROR`; los clientes deben adaptar su manejo de errores. El servicio interno TEI y su identidad se definen en [embeddings-service.md](embeddings-service.md). Fallos de comunicación, HTTP remoto, formato, vector o timeout se traducen a 503 `AI_UNAVAILABLE`; un 429 remoto no añade una respuesta pública 429 ni activa retries.
 
 La transición elimina el pipeline local por completo. La evidencia de alineación del YAML anterior no demuestra conectividad ni compatibilidad del nuevo runtime. Mantener filtro exacto por modelo/versión y comprobar corpus antes de activar; una colección antigua incompatible conserva el 500 aprobado sin reetiquetar vectores. Véanse [research.md](../research.md) y [quickstart.md](../quickstart.md).
