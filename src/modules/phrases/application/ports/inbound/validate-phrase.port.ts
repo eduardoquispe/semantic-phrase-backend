@@ -12,9 +12,3 @@ export interface ValidatePhraseResult {
 export abstract class ValidatePhrasePort {
   abstract execute(input: ValidatePhraseInput): Promise<ValidatePhraseResult>;
 }
-
-export const VALIDATION_SETTINGS = Symbol('VALIDATION_SETTINGS');
-export interface ValidationSettings {
-  threshold: number;
-  ttlMinutes: number;
-}

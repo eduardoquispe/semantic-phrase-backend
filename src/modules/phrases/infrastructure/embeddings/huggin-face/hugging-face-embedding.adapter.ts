@@ -6,7 +6,7 @@ import {
 } from '../../../application/ports/outbound/embedding-generator.port';
 import { Embedding } from '../../../domain/value-objects/embedding.value-object';
 import { PhraseModel } from '../../../domain/value-objects/phrase-model.value-object';
-import { ConfigService } from '@nestjs/config';
+import { ConfigurationPort } from '../../../../../shared/application/ports/outbound/configuration.port';
 import { AiUnavailableError } from '../errors/ai-unavailable.error';
 
 @Injectable()
@@ -16,7 +16,7 @@ export class HuggingFaceEmbeddingAdapter
 {
   private readonly embeddings: OpenAIEmbeddings;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(private readonly config: ConfigurationPort) {
     super();
     this.embeddings = new OpenAIEmbeddings({
       model: config.get<string>('AI_MODEL'),

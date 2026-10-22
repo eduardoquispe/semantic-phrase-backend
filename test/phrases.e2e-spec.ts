@@ -1,6 +1,7 @@
 import { teiConfig } from './fixtures/tei';
 import { EmbeddingGeneratorPort } from '../src/modules/phrases/application/ports/outbound/embedding-generator.port';
-import { ConfigService } from '@nestjs/config';
+import { ConfigurationPort } from '../src/shared/application/ports/outbound/configuration.port';
+import { ConfigurationStub } from './fixtures/configuration';
 import {
   INestApplication,
   Logger,
@@ -46,9 +47,9 @@ describe('GET /api/v1/phrases', () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PhraseRepositoryPort)
       .useValue(repository)
-      .overrideProvider(ConfigService)
+      .overrideProvider(ConfigurationPort)
       .useValue(
-        new ConfigService({
+        new ConfigurationStub({
           ...teiConfig,
           DATABASE_URL: process.env.DATABASE_URL,
         }),

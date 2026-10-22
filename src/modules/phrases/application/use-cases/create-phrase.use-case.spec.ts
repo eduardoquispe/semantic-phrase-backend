@@ -1,3 +1,4 @@
+import { ConfigurationStub } from '../../../../../test/fixtures/configuration';
 import { PhraseValidation } from '../../domain/entities/phrase-validation.entity';
 import { PhraseId } from '../../domain/value-objects/phrase-id.value-object';
 import { PhraseText } from '../../domain/value-objects/phrase-text.value-object';
@@ -31,7 +32,32 @@ describe('CreatePhraseUseCase', () => {
     findValidationMatch: jest.fn(),
     save: jest.fn(),
   };
-  const useCase = new CreatePhraseUseCase(validations, phrases, model);
+  const useCase = new CreatePhraseUseCase(
+    validations,
+    phrases,
+    new ConfigurationStub({
+      AI_MODEL: model.id,
+      AI_EMBEDDING_VERSION: model.version,
+    }),
+  );
+  it.each(['AI_MODEL', 'AI_EMBEDDING_VERSION'])(
+    'requires %s during construction',
+    (key) => {
+      const values: Record<string, unknown> = {
+        AI_MODEL: model.id,
+        AI_EMBEDDING_VERSION: model.version,
+      };
+      delete values[key];
+      expect(
+        () =>
+          new CreatePhraseUseCase(
+            validations,
+            phrases,
+            new ConfigurationStub(values),
+          ),
+      ).toThrow(`Configuration key "${key}" does not exist`);
+    },
+  );
   const input = { validationId: stored.id, text: stored.text.value };
   beforeEach(() => {
     jest.resetAllMocks();

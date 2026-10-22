@@ -4,17 +4,15 @@ import { IncompatiblePhraseCollectionError } from '../src/modules/phrases/applic
 import { AiUnavailableError } from '../src/modules/phrases/infrastructure/embeddings/errors/ai-unavailable.error';
 import { DatabaseError } from '../src/shared/infrastructure/database/errors/database.error';
 import { INestApplication } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigurationPort } from '../src/shared/application/ports/outbound/configuration.port';
+import { ConfigurationStub } from './fixtures/configuration';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { configureApp } from '../src/configure-app';
 import { PhraseValidationsController } from '../src/modules/phrases/infrastructure/http/controllers/phrase-validations.controller';
 import { ValidatePhraseUseCase } from '../src/modules/phrases/application/use-cases/validate-phrase.use-case';
-import {
-  ValidatePhrasePort,
-  VALIDATION_SETTINGS,
-} from '../src/modules/phrases/application/ports/inbound/validate-phrase.port';
+import { ValidatePhrasePort } from '../src/modules/phrases/application/ports/inbound/validate-phrase.port';
 import { EmbeddingGeneratorPort } from '../src/modules/phrases/application/ports/outbound/embedding-generator.port';
 import { PhraseRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-repository.port';
 import { PhraseValidationRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-validation-repository.port';
@@ -55,10 +53,7 @@ describe('POST /api/v1/phrase-validations', () => {
       providers: [
         ValidatePhraseUseCase,
         { provide: ValidatePhrasePort, useExisting: ValidatePhraseUseCase },
-        {
-          provide: VALIDATION_SETTINGS,
-          useValue: { threshold: 0.8538613695045911, ttlMinutes: 15 },
-        },
+        { provide: ConfigurationPort, useValue: new ConfigurationStub() },
         { provide: EmbeddingGeneratorPort, useValue: generator },
         { provide: PhraseRepositoryPort, useValue: repository },
         { provide: PhraseValidationRepositoryPort, useValue: validations },
@@ -275,7 +270,7 @@ describe('POST /api/v1/phrase-validations', () => {
 describe('Validation with OpenAIEmbeddings and simulated TEI', () => {
   let app: INestApplication<App>;
   let transport: jest.SpyInstance;
-  const config = new ConfigService(teiConfig);
+  const config = new ConfigurationStub(teiConfig);
   const repository = {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
@@ -296,11 +291,7 @@ describe('Validation with OpenAIEmbeddings and simulated TEI', () => {
       providers: [
         ValidatePhraseUseCase,
         { provide: ValidatePhrasePort, useExisting: ValidatePhraseUseCase },
-        { provide: ConfigService, useValue: config },
-        {
-          provide: VALIDATION_SETTINGS,
-          useValue: { threshold: 0.8538613695045911, ttlMinutes: 15 },
-        },
+        { provide: ConfigurationPort, useValue: config },
         {
           provide: EmbeddingGeneratorPort,
           useClass: HuggingFaceEmbeddingAdapter,

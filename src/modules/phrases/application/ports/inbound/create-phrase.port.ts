@@ -4,7 +4,6 @@ export interface CreatePhraseInput {
   validationId: string;
   confirmed?: boolean;
 }
-export const REGISTRATION_MODEL = Symbol('REGISTRATION_MODEL');
 export abstract class CreatePhrasePort {
   abstract execute(input: CreatePhraseInput): Promise<Phrase>;
 }

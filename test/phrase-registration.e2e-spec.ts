@@ -2,7 +2,8 @@ import { PhraseId } from '../src/modules/phrases/domain/value-objects/phrase-id.
 import { PhraseText } from '../src/modules/phrases/domain/value-objects/phrase-text.value-object';
 import { randomUUID } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { ConfigurationPort } from '../src/shared/application/ports/outbound/configuration.port';
+import { ConfigurationStub } from './fixtures/configuration';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -53,9 +54,9 @@ describe('phrase registration HTTP flow', () => {
   };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(ConfigService)
+      .overrideProvider(ConfigurationPort)
       .useValue(
-        new ConfigService({
+        new ConfigurationStub({
           ...teiConfig,
           DATABASE_URL:
             'postgresql://semantic:semantic@localhost:5432/semantic_phrase',
