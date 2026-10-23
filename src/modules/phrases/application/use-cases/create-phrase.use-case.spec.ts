@@ -7,6 +7,12 @@ import { PhraseModel } from '../../domain/value-objects/phrase-model.value-objec
 import { NormalizedPhraseText } from '../../domain/value-objects/normalized-phrase-text.value-object';
 import { Embedding } from '../../domain/value-objects/embedding.value-object';
 import { Phrase } from '../../domain/entities/phrase.entity';
+import { PhraseConfirmationRequiredError } from '../../domain/errors/confirmation-required.error';
+import { IncompatibleValidationModelError } from '../../domain/errors/incompatible-validation-model.error';
+import { PhraseMismatchError } from '../../domain/errors/phrase-mismatch.error';
+import { PhraseValidationAlreadyUsedError } from '../../domain/errors/validation-already-used.error';
+import { PhraseValidationExpiredError } from '../../domain/errors/validation-expired.error';
+import { PhraseValidationNotFoundError } from '../errors/phrase-validation-not-found.error';
 
 describe('CreatePhraseUseCase', () => {
   const model = new PhraseModel('MiniLM', 'v1');
@@ -117,36 +123,43 @@ describe('CreatePhraseUseCase', () => {
     expect(returned).toBe(true);
   });
   it.each([
-    [null, 'INVALID_VALIDATION_ID'],
-    [{ ...props, consumedAt: new Date() }, 'VALIDATION_ALREADY_USED'],
-    [{ ...props, expiresAt: new Date(0) }, 'VALIDATION_EXPIRED'],
-    [{ ...props, text: PhraseText.forValidation('hola') }, 'PHRASE_MISMATCH'],
+    [{ ...props, consumedAt: new Date() }, PhraseValidationAlreadyUsedError],
+    [{ ...props, expiresAt: new Date(0) }, PhraseValidationExpiredError],
+    [{ ...props, text: PhraseText.forValidation('hola') }, PhraseMismatchError],
     [
       { ...props, model: new PhraseModel('other', 'v1') },
-      'Incompatible validation model',
+      IncompatibleValidationModelError,
     ],
     [
       { ...props, model: new PhraseModel(model.id, 'other') },
-      'Incompatible validation model',
+      IncompatibleValidationModelError,
     ],
-    [{ ...props, requiresConfirmation: true }, 'CONFIRMATION_REQUIRED'],
+    [{ ...props, requiresConfirmation: true }, PhraseConfirmationRequiredError],
   ])(
-    'rejects inapplicable validation before writes (%s)',
-    async (validation, message) => {
+    'rejects inapplicable validation before writes (%#)',
+    async (validation, errorClass) => {
       validations.findById.mockResolvedValue(
-        validation === null ? null : PhraseValidation.reconstitute(validation),
+        PhraseValidation.reconstitute(validation),
       );
-      for (const confirmed of message === 'CONFIRMATION_REQUIRED'
+      for (const confirmed of errorClass === PhraseConfirmationRequiredError
         ? [undefined, false]
         : [undefined, false, true]) {
         await expect(useCase.execute({ ...input, confirmed })).rejects.toThrow(
-          message,
+          errorClass,
         );
       }
       expect(phrases.save).not.toHaveBeenCalled();
       expect(validations.update).not.toHaveBeenCalled();
     },
   );
+  it('rejects unknown validation before writes', async () => {
+    validations.findById.mockResolvedValue(null);
+    await expect(useCase.execute(input)).rejects.toBeInstanceOf(
+      PhraseValidationNotFoundError,
+    );
+    expect(phrases.save).not.toHaveBeenCalled();
+    expect(validations.update).not.toHaveBeenCalled();
+  });
   it('allows explicit confirmation of a stored alert', async () => {
     validations.findById.mockResolvedValue(
       PhraseValidation.reconstitute({
@@ -164,7 +177,7 @@ describe('CreatePhraseUseCase', () => {
       jest.useFakeTimers().setSystemTime(props.expiresAt);
       try {
         await expect(useCase.execute({ ...input, confirmed })).rejects.toThrow(
-          'VALIDATION_EXPIRED',
+          PhraseValidationExpiredError,
         );
         expect(phrases.save).not.toHaveBeenCalled();
         expect(validations.update).not.toHaveBeenCalled();

@@ -1,3 +1,7 @@
+import {
+  MAX_PHRASE_TEXT_LENGTH,
+  MAX_STORED_PHRASE_TEXT_LENGTH,
+} from '../constants/phrase-text.constants';
 import { InvalidPhraseTextError } from '../errors/invalid-phrase-text.error';
 
 export class PhraseText {
@@ -5,8 +9,10 @@ export class PhraseText {
 
   static forValidation(value: string): PhraseText {
     const text = new PhraseText(value);
-    if (value.length > 280) {
-      throw new InvalidPhraseTextError('Máximo 280 puntos de código Unicode.');
+    if ([...value].length > MAX_PHRASE_TEXT_LENGTH) {
+      throw new InvalidPhraseTextError(
+        `Máximo ${MAX_PHRASE_TEXT_LENGTH} puntos de código Unicode.`,
+      );
     }
     return text;
   }
@@ -21,9 +27,9 @@ export class PhraseText {
         'Phrase text must be a non-empty string.',
       );
     }
-    if ([...value].length > 500) {
+    if ([...value].length > MAX_STORED_PHRASE_TEXT_LENGTH) {
       throw new InvalidPhraseTextError(
-        'Phrase text must not exceed 500 Unicode code points.',
+        `Phrase text must not exceed ${MAX_STORED_PHRASE_TEXT_LENGTH} Unicode code points.`,
       );
     }
     if (/\p{Cc}/u.test(value)) {

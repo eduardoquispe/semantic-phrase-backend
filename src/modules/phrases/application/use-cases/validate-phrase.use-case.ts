@@ -1,6 +1,10 @@
 import { ConfigurationPort } from '../../../../shared/application/ports/outbound/configuration.port';
 import { PhraseValidationMatch } from '../../domain/value-objects/phrase-validation-match.value-object';
 import { Injectable } from '@nestjs/common';
+import {
+  DEFAULT_SIMILARITY_THRESHOLD,
+  DEFAULT_VALIDATION_TTL_MINUTES,
+} from '../constants/validate-phrase.constants';
 import { randomUUID } from 'node:crypto';
 import {
   ValidatePhrasePort,
@@ -27,10 +31,11 @@ export class ValidatePhraseUseCase implements ValidatePhrasePort {
     this.settings = {
       threshold: Number(
         config.get<string | number>('AI_SIMILARITY_THRESHOLD') ??
-          0.8538613695045911,
+          DEFAULT_SIMILARITY_THRESHOLD,
       ),
       ttlMinutes: Number(
-        config.get<string | number>('PHRASE_VALIDATION_TTL_MINUTES') ?? 15,
+        config.get<string | number>('PHRASE_VALIDATION_TTL_MINUTES') ??
+          DEFAULT_VALIDATION_TTL_MINUTES,
       ),
     };
   }

@@ -12,7 +12,7 @@ import { PhraseId } from '../../domain/value-objects/phrase-id.value-object';
 import { PhraseText } from '../../domain/value-objects/phrase-text.value-object';
 import { NormalizedPhraseText } from '../../domain/value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../../domain/value-objects/phrase-model.value-object';
-import { PhraseRegistrationError } from '../errors/phrase-registration.error';
+import { PhraseValidationNotFoundError } from '../errors/phrase-validation-not-found.error';
 
 @Injectable()
 export class CreatePhraseUseCase implements CreatePhrasePort {
@@ -32,22 +32,17 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
     const text = PhraseText.forValidation(input.text).value;
     const validation = await this.validations.findById(input.validationId);
 
-    if (!validation) throw new PhraseRegistrationError('INVALID_VALIDATION_ID');
-    if (validation.consumedAt !== null)
-      throw new PhraseRegistrationError('VALIDATION_ALREADY_USED');
-    if (validation.isExpired(new Date()))
-      throw new PhraseRegistrationError('VALIDATION_EXPIRED');
-    if (validation.text.value !== text)
-      throw new PhraseRegistrationError('PHRASE_MISMATCH');
-    if (
-      validation.model.id !== this.expectedModel.id ||
-      validation.model.version !== this.expectedModel.version
-    )
-      throw new Error('Incompatible validation model');
-    if (validation.requiresConfirmation && input.confirmed !== true)
-      throw new PhraseRegistrationError('CONFIRMATION_REQUIRED');
+    if (!validation) throw new PhraseValidationNotFoundError();
 
     const now = new Date();
+
+    validation.verifyUsable({
+      text,
+      model: this.expectedModel,
+      confirmed: !!input.confirmed,
+      now,
+    });
+
     const phrase = Phrase.create({
       id: new PhraseId(randomUUID()),
       text: validation.text,

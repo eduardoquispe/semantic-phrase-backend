@@ -12,6 +12,11 @@ import {
   MS_PER_SECOND,
 } from '../constants/phrase-validation.constants';
 import { InvalidPhraseValidationError } from '../errors/invalid-phrase-validation.error';
+import { PhraseConfirmationRequiredError } from '../errors/confirmation-required.error';
+import { IncompatibleValidationModelError } from '../errors/incompatible-validation-model.error';
+import { PhraseMismatchError } from '../errors/phrase-mismatch.error';
+import { PhraseValidationAlreadyUsedError } from '../errors/validation-already-used.error';
+import { PhraseValidationExpiredError } from '../errors/validation-expired.error';
 
 export class PhraseValidation {
   private readonly _id: PhraseId;
@@ -118,5 +123,32 @@ export class PhraseValidation {
 
   isExpired(now: Date): boolean {
     return now.getTime() >= this._expiresAt;
+  }
+
+  isConsumed(): boolean {
+    return this._consumedAt !== null;
+  }
+
+  matches(text: string): boolean {
+    return this._text.value === text;
+  }
+
+  isCompatibleWith(model: PhraseModel): boolean {
+    return this._model.id === model.id && this._model.version === model.version;
+  }
+
+  verifyUsable(input: {
+    text: string;
+    model: PhraseModel;
+    confirmed: boolean;
+    now: Date;
+  }): void {
+    if (this.isConsumed()) throw new PhraseValidationAlreadyUsedError();
+    if (this.isExpired(input.now)) throw new PhraseValidationExpiredError();
+    if (!this.matches(input.text)) throw new PhraseMismatchError();
+    if (!this.isCompatibleWith(input.model))
+      throw new IncompatibleValidationModelError();
+    if (this._requiresConfirmation && !input.confirmed)
+      throw new PhraseConfirmationRequiredError();
   }
 }

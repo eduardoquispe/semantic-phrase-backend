@@ -11,6 +11,11 @@ import { Embedding } from '../value-objects/embedding.value-object';
 import { ValidationMatchEnum } from '../enums/validation-match.enum';
 import { InvalidDateError } from '../../../../shared/domain/errors/invalid-date.error';
 import { InvalidPhraseValidationError } from '../errors/invalid-phrase-validation.error';
+import { PhraseConfirmationRequiredError } from '../errors/confirmation-required.error';
+import { IncompatibleValidationModelError } from '../errors/incompatible-validation-model.error';
+import { PhraseMismatchError } from '../errors/phrase-mismatch.error';
+import { PhraseValidationAlreadyUsedError } from '../errors/validation-already-used.error';
+import { PhraseValidationExpiredError } from '../errors/validation-expired.error';
 
 const id = '550e8400-e29b-41d4-a716-446655440000';
 function validationProps(): PhraseValidationProps {
@@ -163,6 +168,71 @@ describe('PhraseValidation', () => {
       const v = PhraseValidation.reconstitute(validationProps());
       expect(v.isExpired(new Date('2026-10-22T12:14:59.999Z'))).toBe(false);
       expect(v.isExpired(new Date('2026-10-22T12:15:00Z'))).toBe(true);
+    });
+
+    it('is compatible only with the same model id and version', () => {
+      const v = PhraseValidation.reconstitute(validationProps());
+      expect(v.isCompatibleWith(new PhraseModel('MiniLM', 'version'))).toBe(
+        true,
+      );
+      expect(v.isCompatibleWith(new PhraseModel('MiniLM', 'other'))).toBe(
+        false,
+      );
+      expect(v.isCompatibleWith(new PhraseModel('other', 'version'))).toBe(
+        false,
+      );
+    });
+
+    describe('assertCanRegister', () => {
+      const valid = {
+        text: validationProps().text.value,
+        model: new PhraseModel('MiniLM', 'version'),
+        confirmed: false,
+        now: new Date('2026-10-22T12:01:00Z'),
+      };
+
+      it('accepts an applicable validation', () => {
+        const v = PhraseValidation.reconstitute(validationProps());
+        expect(() => v.verifyUsable(valid)).not.toThrow();
+      });
+
+      it('accepts a confirmed alert', () => {
+        const v = PhraseValidation.reconstitute({
+          ...validationProps(),
+          requiresConfirmation: true,
+        });
+        expect(() =>
+          v.verifyUsable({ ...valid, confirmed: true }),
+        ).not.toThrow();
+      });
+
+      it.each([
+        [
+          { consumedAt: new Date('2026-10-22T12:00:30Z') },
+          {},
+          PhraseValidationAlreadyUsedError,
+        ],
+        [
+          {},
+          { now: new Date('2026-10-22T12:15:00Z') },
+          PhraseValidationExpiredError,
+        ],
+        [{}, { text: 'Adios' }, PhraseMismatchError],
+        [
+          {},
+          { model: new PhraseModel('other', 'version') },
+          IncompatibleValidationModelError,
+        ],
+        [{ requiresConfirmation: true }, {}, PhraseConfirmationRequiredError],
+      ])('rejects with the matching error (%#)', (props, input, errorClass) => {
+        const v = PhraseValidation.reconstitute({
+          ...validationProps(),
+          ...props,
+        });
+        expect(() => v.verifyUsable({ ...valid, ...input })).toThrow(
+          errorClass,
+        );
+      });
     });
   });
 });
