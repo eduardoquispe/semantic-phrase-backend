@@ -2,18 +2,23 @@ import { CreatePhraseResponseDto } from '../dtos/create-phrase-response.dto';
 import type { ValidatePhraseResult } from '../../../application/ports/inbound/validate-phrase.port';
 import { PhraseValidationResponseDto } from '../dtos/phrase-validation-response.dto';
 import { Phrase } from '../../../domain/entities/phrase.entity';
-import { ListPhrasesResponseDto } from '../dtos/list-phrases-response.dto';
+import {
+  ListPhrasesResponseDto,
+  PhraseResponse,
+} from '../dtos/list-phrases-response.dto';
 import { ListPhrasesResult } from '../../../application/ports/inbound/list-phrases.port';
 
 export class PhrasesMapper {
-  static toCreatePhraseResponse(phrase: Phrase): CreatePhraseResponseDto {
+  private static toPhraseResponse(phrase: Phrase): PhraseResponse {
     return {
-      data: {
-        id: phrase.id,
-        text: phrase.text.value,
-        createdAt: phrase.createdAt.toISOString(),
-      },
+      id: phrase.id,
+      text: phrase.text.value,
+      createdAt: phrase.createdAt.toISOString(),
     };
+  }
+
+  static toCreatePhraseResponse(phrase: Phrase): CreatePhraseResponseDto {
+    return { data: this.toPhraseResponse(phrase) };
   }
   static toValidationResponse(
     result: ValidatePhraseResult,
@@ -40,11 +45,7 @@ export class PhrasesMapper {
     list: ListPhrasesResult,
   ): ListPhrasesResponseDto {
     return new ListPhrasesResponseDto(
-      list.data.map((phrase: Phrase) => ({
-        id: phrase.id,
-        text: phrase.text.value,
-        createdAt: phrase.createdAt.toISOString(),
-      })),
+      list.data.map((phrase: Phrase) => this.toPhraseResponse(phrase)),
       {
         page: list.meta.page,
         limit: list.meta.limit,
