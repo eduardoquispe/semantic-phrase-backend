@@ -6,6 +6,8 @@ import { PhraseText } from '../value-objects/phrase-text.value-object';
 import { PhraseModel } from '../value-objects/phrase-model.value-object';
 import { Embedding } from '../value-objects/embedding.value-object';
 import { ValidationMatchEnum } from '../enums/validation-match.enum';
+import { InvalidPhraseError } from '../errors/invalid-phrase.error';
+import { InvalidPhraseValidationError } from '../errors/invalid-phrase-validation.error';
 
 const id = '550e8400-e29b-41d4-a716-446655440000';
 function validationProps(): PhraseValidationProps {
@@ -95,5 +97,54 @@ describe('PhraseValidation', () => {
     expect(validation.text).toBe(props.text);
     expect(validation.embedding).toBe(props.embedding);
     expect(validation.model).toBe(props.model);
+  });
+
+  it.each(['', '  ', null, undefined, 42])(
+    'rejects missing or blank normalizedText: %p',
+    (normalizedText) => {
+      expect(
+        () =>
+          new PhraseValidation({
+            ...validationProps(),
+            normalizedText: normalizedText as string,
+          }),
+      ).toThrow(InvalidPhraseError);
+    },
+  );
+
+  it.each(['createdAt', 'expiresAt'] as const)(
+    'rejects invalid %s',
+    (field) => {
+      for (const value of [new Date(NaN), '2026-10-22', null, undefined]) {
+        expect(
+          () =>
+            new PhraseValidation({
+              ...validationProps(),
+              [field]: value,
+            }),
+        ).toThrow(InvalidPhraseValidationError);
+      }
+    },
+  );
+
+  it.each([new Date(NaN), '2026-10-22'])(
+    'rejects an invalid consumedAt when not null: %p',
+    (consumedAt) => {
+      expect(
+        () =>
+          new PhraseValidation({
+            ...validationProps(),
+            consumedAt: consumedAt as Date,
+          }),
+      ).toThrow(InvalidPhraseValidationError);
+    },
+  );
+
+  it('exposes an epoch consumedAt instead of treating it as null', () => {
+    const validation = new PhraseValidation({
+      ...validationProps(),
+      consumedAt: new Date(0),
+    });
+    expect(validation.consumedAt).toEqual(new Date(0));
   });
 });

@@ -20,5 +20,8 @@ export function configureApp(app: INestApplication): void {
       exceptionFactory: validationExceptionFactory,
     }),
   );
+  app.enableCors({
+    origin: 'http://localhost:5173',
+  });
   app.useGlobalFilters(new ProblemDetailsFilter(app.get(HttpAdapterHost)));
 }

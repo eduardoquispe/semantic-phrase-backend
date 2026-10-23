@@ -4,16 +4,7 @@ import type { PhraseText } from '../value-objects/phrase-text.value-object';
 import { NormalizedPhraseText } from '../value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../value-objects/phrase-model.value-object';
 import { PhraseCreatedAt } from '../value-objects/phrase-created-at.value-object';
-
-export interface PhraseProps {
-  readonly id: PhraseId;
-  readonly text: PhraseText;
-  readonly normalizedText: string;
-  readonly embedding: Embedding;
-  readonly modelId: string;
-  readonly modelVersion: string;
-  readonly createdAt: Date;
-}
+import { PhraseProps } from '../types/phrase-props.interface';
 
 export class Phrase {
   private readonly _id: PhraseId;

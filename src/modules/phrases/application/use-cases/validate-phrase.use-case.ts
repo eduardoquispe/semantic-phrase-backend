@@ -38,9 +38,12 @@ export class ValidatePhraseUseCase implements ValidatePhrasePort {
   async execute(input: ValidatePhraseInput): Promise<ValidatePhraseResult> {
     const text = PhraseText.forValidation(input.text);
 
-    const embedding = await this.generatorEmbedding.generate(text.value);
+    const embeddingGenerated = await this.generatorEmbedding.generate(
+      text.value,
+    );
     const result = await this.phrasesRepository.findValidationMatch({
-      ...embedding,
+      embedding: embeddingGenerated.embedding,
+      model: embeddingGenerated.model,
       normalizedText: text.normalized,
     });
 
@@ -50,7 +53,8 @@ export class ValidatePhraseUseCase implements ValidatePhrasePort {
     const validation = new PhraseValidation({
       id: new PhraseId(randomUUID()),
       text,
-      ...embedding,
+      embedding: embeddingGenerated.embedding,
+      model: embeddingGenerated.model,
       match,
       normalizedText: text.normalized,
       requiresConfirmation:

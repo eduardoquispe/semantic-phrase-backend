@@ -132,7 +132,7 @@ describe('ValidatePhraseUseCase', () => {
         find: repository.findValidationMatch,
         save: validations.save,
       }[stage];
-      operation.mockRejectedValueOnce(failure);
+      operation?.mockRejectedValueOnce(failure);
       await expect(useCase.execute({ text: 'Hola' })).rejects.toBe(failure);
       if (stage === 'generate')
         expect(repository.findValidationMatch).not.toHaveBeenCalled();
