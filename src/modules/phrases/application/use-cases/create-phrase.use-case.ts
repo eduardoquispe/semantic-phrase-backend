@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { Phrase } from '../../domain/entities/phrase.entity';
 import { PhraseId } from '../../domain/value-objects/phrase-id.value-object';
 import { PhraseText } from '../../domain/value-objects/phrase-text.value-object';
+import { NormalizedPhraseText } from '../../domain/value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../../domain/value-objects/phrase-model.value-object';
 import { PhraseRegistrationError } from '../errors/phrase-registration.error';
 
@@ -46,19 +47,19 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
     if (validation.requiresConfirmation && input.confirmed !== true)
       throw new PhraseRegistrationError('CONFIRMATION_REQUIRED');
 
-    const phrase = new Phrase({
+    const now = new Date();
+    const phrase = Phrase.create({
       id: new PhraseId(randomUUID()),
       text: validation.text,
-      normalizedText: validation.normalizedText,
+      normalizedText: new NormalizedPhraseText(validation.normalizedText),
       embedding: validation.embedding,
-      modelId: validation.model.id,
-      modelVersion: validation.model.version,
-      createdAt: new Date(),
+      model: validation.model,
+      now,
     });
 
     await this.phrases.save(phrase);
     await this.validations.update(validation.id, {
-      consumedAt: new Date(),
+      consumedAt: now,
     });
     return phrase;
   }

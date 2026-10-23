@@ -1,4 +1,4 @@
-import { DomainError } from '../errors/domain.error';
+import { DomainError } from '../../../../shared/domain/errors/domain.error';
 import { InvalidPhraseTextError } from '../errors/invalid-phrase-text.error';
 import { PhraseText } from './phrase-text.value-object';
 

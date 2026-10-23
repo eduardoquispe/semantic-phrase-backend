@@ -5,6 +5,8 @@ import { PhraseId } from '../../../domain/value-objects/phrase-id.value-object';
 import { PhraseText } from '../../../domain/value-objects/phrase-text.value-object';
 import { Embedding } from '../../../domain/value-objects/embedding.value-object';
 import { PhrasesMapper } from '../mapper/phrases.mapper';
+import { NormalizedPhraseText } from '../../../domain/value-objects/normalized-phrase-text.value-object';
+import { PhraseModel } from '../../../domain/value-objects/phrase-model.value-object';
 
 describe('PhrasesController', () => {
   const result = {
@@ -16,13 +18,12 @@ describe('PhrasesController', () => {
   const controller = new PhrasesController(port, create);
 
   it('delegates registration and maps only public phrase fields', async () => {
-    const phrase = new Phrase({
+    const phrase = Phrase.reconstitute({
       id: new PhraseId('550e8400-e29b-41d4-a716-446655440000'),
       text: new PhraseText(' Hola '),
-      normalizedText: 'hola',
+      normalizedText: new NormalizedPhraseText('hola'),
       embedding: new Embedding(Array<number>(384).fill(0.25)),
-      modelId: 'MiniLM',
-      modelVersion: 'v1',
+      model: new PhraseModel('MiniLM', 'v1'),
       createdAt: new Date('2026-10-22T12:00:00Z'),
     });
     create.execute.mockResolvedValueOnce(phrase);

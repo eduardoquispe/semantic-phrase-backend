@@ -4,6 +4,8 @@ import { PhraseId } from '../../domain/value-objects/phrase-id.value-object';
 import { PhraseText } from '../../domain/value-objects/phrase-text.value-object';
 import { PhraseRepositoryPort } from '../ports/outbound/phrase-repository.port';
 import { ListPhrasesUseCase } from './list-phrases.use-case';
+import { NormalizedPhraseText } from '../../domain/value-objects/normalized-phrase-text.value-object';
+import { PhraseModel } from '../../domain/value-objects/phrase-model.value-object';
 
 describe('ListPhrasesUseCase', () => {
   const list = jest.fn<
@@ -39,22 +41,20 @@ describe('ListPhrasesUseCase', () => {
   );
 
   it('preserves the domain objects and order returned by the repository', async () => {
-    const phrase = new Phrase({
+    const phrase = Phrase.reconstitute({
       id: new PhraseId('550e8400-e29b-41d4-a716-446655440000'),
       text: new PhraseText('Una frase'),
-      normalizedText: 'una frase',
+      normalizedText: new NormalizedPhraseText('una frase'),
       embedding: new Embedding(Array<number>(384).fill(0.25)),
-      modelId: 'MiniLM',
-      modelVersion: 'revision-1',
+      model: new PhraseModel('MiniLM', 'revision-1'),
       createdAt: new Date('2026-10-21T12:00:00Z'),
     });
-    const olderPhrase = new Phrase({
+    const olderPhrase = Phrase.reconstitute({
       id: new PhraseId('550e8400-e29b-41d4-a716-446655440001'),
       text: phrase.text,
-      normalizedText: phrase.normalizedText,
+      normalizedText: new NormalizedPhraseText(phrase.normalizedText),
       embedding: phrase.embedding,
-      modelId: phrase.modelId,
-      modelVersion: phrase.modelVersion,
+      model: phrase.model,
       createdAt: new Date('2026-10-20T12:00:00Z'),
     });
     const data = [phrase, olderPhrase];

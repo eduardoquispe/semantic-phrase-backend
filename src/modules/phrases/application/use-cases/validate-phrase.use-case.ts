@@ -38,26 +38,25 @@ export class ValidatePhraseUseCase implements ValidatePhrasePort {
   async execute(input: ValidatePhraseInput): Promise<ValidatePhraseResult> {
     const text = PhraseText.forValidation(input.text);
 
-    const embedding = await this.generatorEmbedding.generate(text.value);
+    const embeddingGenerated = await this.generatorEmbedding.generate(
+      text.value,
+    );
     const result = await this.phrasesRepository.findValidationMatch({
-      ...embedding,
+      embedding: embeddingGenerated.embedding,
+      model: embeddingGenerated.model,
       normalizedText: text.normalized,
     });
 
     const match = result ? new PhraseValidationMatch(result) : null;
-    const now = Math.floor(Date.now() / 1000) * 1000;
-
-    const validation = new PhraseValidation({
+    const validation = PhraseValidation.create({
       id: new PhraseId(randomUUID()),
       text,
-      ...embedding,
+      embedding: embeddingGenerated.embedding,
+      model: embeddingGenerated.model,
       match,
-      normalizedText: text.normalized,
-      requiresConfirmation:
-        match?.requiresConfirmation(this.settings.threshold) ?? false,
-      consumedAt: null,
-      createdAt: new Date(now),
-      expiresAt: new Date(now + this.settings.ttlMinutes * 60 * 1000),
+      threshold: this.settings.threshold,
+      ttlMinutes: this.settings.ttlMinutes,
+      now: new Date(),
     });
 
     await this.validations.save(validation);

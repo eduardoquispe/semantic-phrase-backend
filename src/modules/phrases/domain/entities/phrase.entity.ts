@@ -1,19 +1,11 @@
 import type { Embedding } from '../value-objects/embedding.value-object';
 import type { PhraseId } from '../value-objects/phrase-id.value-object';
 import type { PhraseText } from '../value-objects/phrase-text.value-object';
-import { NormalizedPhraseText } from '../value-objects/normalized-phrase-text.value-object';
-import { PhraseModel } from '../value-objects/phrase-model.value-object';
-import { PhraseCreatedAt } from '../value-objects/phrase-created-at.value-object';
-
-export interface PhraseProps {
-  readonly id: PhraseId;
-  readonly text: PhraseText;
-  readonly normalizedText: string;
-  readonly embedding: Embedding;
-  readonly modelId: string;
-  readonly modelVersion: string;
-  readonly createdAt: Date;
-}
+import type { NormalizedPhraseText } from '../value-objects/normalized-phrase-text.value-object';
+import type { PhraseModel } from '../value-objects/phrase-model.value-object';
+import type { PhraseProps } from '../types/phrase-props.interface';
+import type { CreatePhraseProps } from '../types/create-phrase-input.interface';
+import { toTimestamp } from '../../../../shared/domain/utils/to-timestamp';
 
 export class Phrase {
   private readonly _id: PhraseId;
@@ -21,16 +13,31 @@ export class Phrase {
   private readonly _embedding: Embedding;
   private readonly _normalizedText: NormalizedPhraseText;
   private readonly _model: PhraseModel;
-  private readonly _createdAt: PhraseCreatedAt;
+  private readonly _createdAt: number;
 
-  constructor(props: PhraseProps) {
+  private constructor(props: PhraseProps) {
     this._id = props.id;
     this._text = props.text;
-    this._normalizedText = new NormalizedPhraseText(props.normalizedText);
+    this._normalizedText = props.normalizedText;
     this._embedding = props.embedding;
-    this._model = new PhraseModel(props.modelId, props.modelVersion);
-    this._createdAt = new PhraseCreatedAt(props.createdAt);
+    this._model = props.model;
+    this._createdAt = toTimestamp(props.createdAt, 'createdAt');
     Object.freeze(this);
+  }
+
+  static create(props: CreatePhraseProps): Phrase {
+    return new Phrase({
+      id: props.id,
+      text: props.text,
+      normalizedText: props.normalizedText,
+      embedding: props.embedding,
+      model: props.model,
+      createdAt: props.now,
+    });
+  }
+
+  static reconstitute(props: PhraseProps): Phrase {
+    return new Phrase(props);
   }
 
   get id(): string {
@@ -38,7 +45,7 @@ export class Phrase {
   }
 
   get createdAt(): Date {
-    return this._createdAt.value;
+    return new Date(this._createdAt);
   }
 
   get text(): PhraseText {
@@ -53,11 +60,7 @@ export class Phrase {
     return this._normalizedText.value;
   }
 
-  get modelId(): string {
-    return this._model.id;
-  }
-
-  get modelVersion(): string {
-    return this._model.version;
+  get model(): PhraseModel {
+    return this._model;
   }
 }

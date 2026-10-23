@@ -4,6 +4,7 @@ import { PhraseId } from '../../domain/value-objects/phrase-id.value-object';
 import { PhraseText } from '../../domain/value-objects/phrase-text.value-object';
 import { CreatePhraseUseCase } from './create-phrase.use-case';
 import { PhraseModel } from '../../domain/value-objects/phrase-model.value-object';
+import { NormalizedPhraseText } from '../../domain/value-objects/normalized-phrase-text.value-object';
 import { Embedding } from '../../domain/value-objects/embedding.value-object';
 import { Phrase } from '../../domain/entities/phrase.entity';
 
@@ -12,7 +13,7 @@ describe('CreatePhraseUseCase', () => {
   const props = {
     id: new PhraseId('550e8400-e29b-41d4-a716-446655440000'),
     text: PhraseText.forValidation(' Hola '),
-    normalizedText: 'stored-normalized-text',
+    normalizedText: new NormalizedPhraseText('stored-normalized-text'),
     model,
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     requiresConfirmation: false,
@@ -21,7 +22,7 @@ describe('CreatePhraseUseCase', () => {
     createdAt: new Date('2026-10-22'),
     expiresAt: new Date('2099-01-01'),
   };
-  const stored = new PhraseValidation(props);
+  const stored = PhraseValidation.reconstitute(props);
   const validations = {
     findById: jest.fn(),
     save: jest.fn(),
@@ -75,8 +76,7 @@ describe('CreatePhraseUseCase', () => {
       expect(phrase.text.value).toBe(stored.text.value);
       expect(phrase.normalizedText).toBe(stored.normalizedText);
       expect(phrase.embedding.values).toEqual(stored.embedding.values);
-      expect(phrase.modelId).toBe(model.id);
-      expect(phrase.modelVersion).toBe(model.version);
+      expect(phrase.model).toBe(stored.model);
       expect(phrase.createdAt.getTime()).toBeGreaterThanOrEqual(before);
       expect(phrase.createdAt.getTime()).toBeLessThanOrEqual(Date.now());
       expect(phrases.save).toHaveBeenCalledWith(phrase);
@@ -134,7 +134,7 @@ describe('CreatePhraseUseCase', () => {
     'rejects inapplicable validation before writes (%s)',
     async (validation, message) => {
       validations.findById.mockResolvedValue(
-        validation === null ? null : new PhraseValidation(validation),
+        validation === null ? null : PhraseValidation.reconstitute(validation),
       );
       for (const confirmed of message === 'CONFIRMATION_REQUIRED'
         ? [undefined, false]
@@ -149,7 +149,7 @@ describe('CreatePhraseUseCase', () => {
   );
   it('allows explicit confirmation of a stored alert', async () => {
     validations.findById.mockResolvedValue(
-      new PhraseValidation({
+      PhraseValidation.reconstitute({
         ...props,
         requiresConfirmation: true,
       }),

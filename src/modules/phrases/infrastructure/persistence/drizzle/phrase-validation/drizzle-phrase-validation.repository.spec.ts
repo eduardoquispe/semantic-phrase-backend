@@ -18,7 +18,7 @@ function validationProps(): PhraseValidationProps {
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     model: new PhraseModel('MiniLM', 'version'),
     match: null,
-    normalizedText: 'hola',
+    normalizedText: new NormalizedPhraseText('hola'),
     requiresConfirmation: false,
     consumedAt: null,
     createdAt: new Date('2026-10-22T12:00:00Z'),
@@ -27,6 +27,7 @@ function validationProps(): PhraseValidationProps {
 }
 
 import { DatabaseError } from '../../../../../../shared/infrastructure/database/errors/database.error';
+import { NormalizedPhraseText } from '../../../../domain/value-objects/normalized-phrase-text.value-object';
 describe('temporary validation repository', () => {
   const values = jest.fn();
   const limit = jest.fn();
@@ -48,7 +49,7 @@ describe('temporary validation repository', () => {
   it('returns null for an absent reference and maps an existing stored row', async () => {
     limit.mockResolvedValueOnce([]);
     await expect(repository.findById(id)).resolves.toBeNull();
-    const v = new PhraseValidation(validationProps());
+    const v = PhraseValidation.reconstitute(validationProps());
     const raw = {
       id,
       text: v.text.value,
@@ -98,7 +99,7 @@ describe('temporary validation repository', () => {
         throw error;
       });
     await expect(
-      repository.save(new PhraseValidation(validationProps())),
+      repository.save(PhraseValidation.reconstitute(validationProps())),
     ).rejects.toBe(error);
     expect(insert).not.toHaveBeenCalled();
     save.mockRestore();
@@ -168,7 +169,7 @@ describe('temporary validation repository', () => {
     );
     let saved = false;
     const pending = repository
-      .save(new PhraseValidation(validationProps()))
+      .save(PhraseValidation.reconstitute(validationProps()))
       .then(() => {
         saved = true;
       });
@@ -188,7 +189,7 @@ describe('temporary validation repository', () => {
   ])('propagates appropriate error', async (error, kind) => {
     values.mockRejectedValue(error);
     await expect(
-      repository.save(new PhraseValidation(validationProps())),
+      repository.save(PhraseValidation.reconstitute(validationProps())),
     ).rejects.toMatchObject({ name: kind.name, cause: error });
   });
 });

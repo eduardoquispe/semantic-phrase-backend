@@ -1,4 +1,4 @@
-import { DomainError } from '../errors/domain.error';
+import { DomainError } from '../../../../shared/domain/errors/domain.error';
 import { InvalidEmbeddingError } from '../errors/invalid-embedding.error';
 import { Embedding } from './embedding.value-object';
 

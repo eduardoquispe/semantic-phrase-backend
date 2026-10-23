@@ -3,15 +3,16 @@ import { PhraseText } from '../../../../domain/value-objects/phrase-text.value-o
 import { PhraseValidation } from '../../../../domain/entities/phrase-validation.entity';
 import { DrizzlePhraseValidationsModel } from './drizzle-phrase-validations.model';
 import { Embedding } from '../../../../domain/value-objects/embedding.value-object';
+import { NormalizedPhraseText } from '../../../../domain/value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../../../../domain/value-objects/phrase-model.value-object';
 export class DrizzlePhraseValidationMapper {
   static toDomain(
     raw: typeof DrizzlePhraseValidationsModel.$inferSelect,
   ): PhraseValidation {
-    return new PhraseValidation({
+    return PhraseValidation.reconstitute({
       id: new PhraseId(raw.id),
       text: PhraseText.forValidation(raw.text),
-      normalizedText: raw.normalizedText,
+      normalizedText: new NormalizedPhraseText(raw.normalizedText),
       embedding: new Embedding(JSON.parse(raw.embedding) as number[]),
       model: new PhraseModel(raw.modelId, raw.modelVersion),
       requiresConfirmation: raw.requiresConfirmation,

@@ -22,6 +22,8 @@ import { InvalidPhraseError } from '../src/modules/phrases/domain/errors/invalid
 import { InvalidPhraseTextError } from '../src/modules/phrases/domain/errors/invalid-phrase-text.error';
 import { App } from 'supertest/types';
 import { InvalidEmbeddingError } from '../src/modules/phrases/domain/errors/invalid-embedding.error';
+import { NormalizedPhraseText } from '../src/modules/phrases/domain/value-objects/normalized-phrase-text.value-object';
+import { PhraseModel } from '../src/modules/phrases/domain/value-objects/phrase-model.value-object';
 
 interface ProblemBody {
   title: string;
@@ -80,20 +82,17 @@ describe('GET /api/v1/phrases', () => {
   });
 
   function seed(count: number) {
-    rows = Array.from(
-      { length: count },
-      (_, i) =>
-        new Phrase({
-          id: new PhraseId(
-            `${String(count - i).padStart(8, '0')}-0000-4000-8000-000000000000`,
-          ),
-          text: new PhraseText(`Phrase ${i}`),
-          normalizedText: `phrase ${i}`,
-          embedding: new Embedding(Array<number>(384).fill(0.25)),
-          modelId: 'MiniLM',
-          modelVersion: 'revision-1',
-          createdAt: new Date(Date.UTC(2026, 9, 21, 0, 0, count - i)),
-        }),
+    rows = Array.from({ length: count }, (_, i) =>
+      Phrase.reconstitute({
+        id: new PhraseId(
+          `${String(count - i).padStart(8, '0')}-0000-4000-8000-000000000000`,
+        ),
+        text: new PhraseText(`Phrase ${i}`),
+        normalizedText: new NormalizedPhraseText(`phrase ${i}`),
+        embedding: new Embedding(Array<number>(384).fill(0.25)),
+        model: new PhraseModel('MiniLM', 'revision-1'),
+        createdAt: new Date(Date.UTC(2026, 9, 21, 0, 0, count - i)),
+      }),
     );
   }
 
@@ -102,13 +101,12 @@ describe('GET /api/v1/phrases', () => {
     const original = rows[0];
     for (const size of [281, 500]) {
       rows = [
-        new Phrase({
+        Phrase.reconstitute({
           id: new PhraseId(original.id),
           text: new PhraseText('😀'.repeat(size)),
-          normalizedText: '😀'.repeat(size),
+          normalizedText: new NormalizedPhraseText('😀'.repeat(size)),
           embedding: original.embedding,
-          modelId: original.modelId,
-          modelVersion: original.modelVersion,
+          model: original.model,
           createdAt: original.createdAt,
         }),
       ];
@@ -199,13 +197,12 @@ describe('GET /api/v1/phrases', () => {
 
   it('preserves descending ID order when creation dates tie', async () => {
     seed(2);
-    rows[1] = new Phrase({
+    rows[1] = Phrase.reconstitute({
       id: new PhraseId(rows[1].id),
       text: rows[1].text,
-      normalizedText: rows[1].normalizedText,
+      normalizedText: new NormalizedPhraseText(rows[1].normalizedText),
       embedding: rows[1].embedding,
-      modelId: rows[1].modelId,
-      modelVersion: rows[1].modelVersion,
+      model: rows[1].model,
       createdAt: rows[0].createdAt,
     });
     const response = await request(app.getHttpServer())

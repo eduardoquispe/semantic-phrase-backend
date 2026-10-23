@@ -5,7 +5,7 @@ export class PhraseText {
 
   static forValidation(value: string): PhraseText {
     const text = new PhraseText(value);
-    if ([...value].length > 280) {
+    if (value.length > 280) {
       throw new InvalidPhraseTextError('Máximo 280 puntos de código Unicode.');
     }
     return text;

@@ -11,6 +11,7 @@ import type { SQL } from 'drizzle-orm';
 import { DrizzlePhraseRepository } from './drizzle-phrase.repository';
 import { DatabaseProvider } from '../../../../../../shared/infrastructure/database/database.provider';
 import { Embedding } from '../../../../domain/value-objects/embedding.value-object';
+import { NormalizedPhraseText } from '../../../../domain/value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../../../../domain/value-objects/phrase-model.value-object';
 import { DatabaseError } from '../../../../../../shared/infrastructure/database/errors/database.error';
 import { ValidationMatchEnum } from '../../../../domain/enums/validation-match.enum';
@@ -142,13 +143,12 @@ describe('save phrase', () => {
   const repository = new DrizzlePhraseRepository({
     client: { insert },
   } as unknown as DatabaseProvider);
-  const phrase = new Phrase({
+  const phrase = Phrase.reconstitute({
     id: new PhraseId('550e8400-e29b-41d4-a716-446655440000'),
     text: PhraseText.forValidation(' Hola '),
-    normalizedText: 'stored-normalized',
+    normalizedText: new NormalizedPhraseText('stored-normalized'),
     embedding: new Embedding(Array<number>(384).fill(0.25)),
-    modelId: 'MiniLM',
-    modelVersion: 'v1',
+    model: new PhraseModel('MiniLM', 'v1'),
     createdAt: new Date('2026-10-22T12:00:00Z'),
   });
   beforeEach(() => jest.clearAllMocks());

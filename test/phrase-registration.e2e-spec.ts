@@ -16,6 +16,8 @@ import { PhraseValidationRepositoryPort } from '../src/modules/phrases/applicati
 import { PhraseValidation } from '../src/modules/phrases/domain/entities/phrase-validation.entity';
 import { Phrase } from '../src/modules/phrases/domain/entities/phrase.entity';
 import { Embedding } from '../src/modules/phrases/domain/value-objects/embedding.value-object';
+import type { PhraseValidationProps } from '../src/modules/phrases/domain/types/phrase-validation-props.interface';
+import { NormalizedPhraseText } from '../src/modules/phrases/domain/value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../src/modules/phrases/domain/value-objects/phrase-model.value-object';
 import { SimilarityScore } from '../src/modules/phrases/domain/value-objects/similarity-score.value-object';
 import { DatabaseError } from '../src/shared/infrastructure/database/errors/database.error';
@@ -30,6 +32,25 @@ interface ProblemBody {
   status: number;
   code: string;
   errors?: { field: string; messages: string[] }[];
+}
+
+function rebuild(
+  previous: PhraseValidation,
+  changes: Partial<PhraseValidationProps>,
+): PhraseValidation {
+  return PhraseValidation.reconstitute({
+    id: new PhraseId(previous.id),
+    text: previous.text,
+    embedding: previous.embedding,
+    model: previous.model,
+    match: previous.match,
+    normalizedText: new NormalizedPhraseText(previous.normalizedText),
+    requiresConfirmation: previous.requiresConfirmation,
+    consumedAt: previous.consumedAt,
+    createdAt: previous.createdAt,
+    expiresAt: previous.expiresAt,
+    ...changes,
+  });
 }
 
 describe('phrase registration HTTP flow', () => {
@@ -93,10 +114,7 @@ describe('phrase registration HTTP flow', () => {
       (id: string, changes: Partial<PhraseValidation>) => {
         stored.set(
           id,
-          new PhraseValidation({
-            ...stored.get(id)!,
-            ...changes,
-            id: new PhraseId(id),
+          rebuild(stored.get(id)!, {
             match: changes.match ?? stored.get(id)!.match,
             createdAt: changes.createdAt ?? stored.get(id)!.createdAt,
             expiresAt: changes.expiresAt ?? stored.get(id)!.expiresAt,
@@ -247,15 +265,7 @@ describe('phrase registration HTTP flow', () => {
     async (_name, change, status, code) => {
       const validationId = await validate();
       const previous = stored.get(validationId)!;
-      const state = new PhraseValidation({
-        ...previous,
-        id: new PhraseId(previous.id),
-        match: null,
-        createdAt: previous.createdAt,
-        expiresAt: previous.expiresAt,
-        consumedAt: previous.consumedAt,
-        ...change,
-      });
+      const state = rebuild(previous, { match: null, ...change });
       stored.set(validationId, state);
       expectProblem(
         await post({ text: ' Hola ', validationId, confirmed: true }).expect(

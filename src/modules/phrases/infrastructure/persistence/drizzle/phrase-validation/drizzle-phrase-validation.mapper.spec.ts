@@ -17,7 +17,7 @@ function validationProps(): PhraseValidationProps {
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     model: new PhraseModel(teiConfig.AI_MODEL, teiConfig.AI_EMBEDDING_VERSION),
     match: null,
-    normalizedText: 'hola',
+    normalizedText: new NormalizedPhraseText('hola'),
     requiresConfirmation: false,
     consumedAt: null,
     createdAt: new Date('2026-10-22T12:00:00Z'),
@@ -27,6 +27,7 @@ function validationProps(): PhraseValidationProps {
 
 import { SimilarityScore } from '../../../../domain/value-objects/similarity-score.value-object';
 import { ValidationMatchEnum } from '../../../../domain/enums/validation-match.enum';
+import { NormalizedPhraseText } from '../../../../domain/value-objects/normalized-phrase-text.value-object';
 describe('DrizzlePhraseValidationMapper', () => {
   it('maps partial changes without clearing omitted fields or changing identity', () => {
     const consumedAt = new Date();
@@ -47,7 +48,7 @@ describe('DrizzlePhraseValidationMapper', () => {
     });
   });
   it('maps all editable fields with their persistence representations', () => {
-    const validation = new PhraseValidation(validationProps());
+    const validation = PhraseValidation.reconstitute(validationProps());
     const { id: ignoredId, ...expected } =
       DrizzlePhraseValidationMapper.toPersistence(validation);
     expect(ignoredId).toBe(id);
@@ -66,7 +67,7 @@ describe('DrizzlePhraseValidationMapper', () => {
           similarityScore: new SimilarityScore(score),
         });
       props.requiresConfirmation = score !== null && score >= 0.85;
-      const v = new PhraseValidation(props);
+      const v = PhraseValidation.reconstitute(props);
       const row = DrizzlePhraseValidationMapper.toPersistence(v);
       expect(row).toEqual({
         id: v.id,
@@ -109,7 +110,7 @@ describe('stored validation mapping', () => {
   });
   it('preserves stored alert, normalized text and consumed time without recomputing', () => {
     const row = DrizzlePhraseValidationMapper.toPersistence(
-      new PhraseValidation(validationProps()),
+      PhraseValidation.reconstitute(validationProps()),
     );
     const consumedAt = new Date('2026-10-22T12:01:00Z');
     const result = DrizzlePhraseValidationMapper.toDomain({

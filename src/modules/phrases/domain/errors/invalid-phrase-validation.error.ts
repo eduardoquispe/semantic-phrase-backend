@@ -1,2 +1,2 @@
-import { DomainError } from './domain.error';
+import { DomainError } from '../../../../shared/domain/errors/domain.error';
 export class InvalidPhraseValidationError extends DomainError {}
