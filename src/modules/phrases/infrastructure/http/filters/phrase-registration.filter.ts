@@ -24,6 +24,10 @@ const failures: Record<
     status: 400,
     detail: 'El texto no corresponde a la validación.',
   },
+  INCOMPATIBLE_MODEL: {
+    status: 409,
+    detail: 'La validación no es compatible con el modelo actual.',
+  },
   VALIDATION_EXPIRED: {
     status: 409,
     detail: 'La validación expiró. Valida nuevamente la frase.',

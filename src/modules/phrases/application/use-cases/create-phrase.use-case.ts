@@ -32,18 +32,15 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
     const validation = await this.validations.findById(input.validationId);
 
     if (!validation) throw new PhraseRegistrationError('INVALID_VALIDATION_ID');
-    if (validation.consumedAt !== null)
+    if (validation.isConsumed())
       throw new PhraseRegistrationError('VALIDATION_ALREADY_USED');
     if (validation.isExpired(new Date()))
       throw new PhraseRegistrationError('VALIDATION_EXPIRED');
-    if (validation.text.value !== text)
+    if (!validation.matches(text))
       throw new PhraseRegistrationError('PHRASE_MISMATCH');
-    if (
-      validation.model.id !== this.expectedModel.id ||
-      validation.model.version !== this.expectedModel.version
-    )
-      throw new Error('Incompatible validation model');
-    if (validation.requiresConfirmation && input.confirmed !== true)
+    if (!validation.isCompatibleWith(this.expectedModel))
+      throw new PhraseRegistrationError('INCOMPATIBLE_MODEL');
+    if (validation.needsConfirmation(input.confirmed === true))
       throw new PhraseRegistrationError('CONFIRMATION_REQUIRED');
 
     const phrase = new Phrase({

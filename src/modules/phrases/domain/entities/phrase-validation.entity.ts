@@ -93,4 +93,20 @@ export class PhraseValidation {
   isExpired(now: Date): boolean {
     return now.getTime() >= this._expiresAt;
   }
+
+  isConsumed(): boolean {
+    return this._consumedAt !== null;
+  }
+
+  matches(text: string): boolean {
+    return this._text.value === text;
+  }
+
+  isCompatibleWith(model: PhraseModel): boolean {
+    return this._model.id === model.id && this._model.version === model.version;
+  }
+
+  needsConfirmation(confirmed: boolean): boolean {
+    return this._requiresConfirmation && confirmed !== true;
+  }
 }

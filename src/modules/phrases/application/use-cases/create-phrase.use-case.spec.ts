@@ -123,11 +123,11 @@ describe('CreatePhraseUseCase', () => {
     [{ ...props, text: PhraseText.forValidation('hola') }, 'PHRASE_MISMATCH'],
     [
       { ...props, model: new PhraseModel('other', 'v1') },
-      'Incompatible validation model',
+      'INCOMPATIBLE_MODEL',
     ],
     [
       { ...props, model: new PhraseModel(model.id, 'other') },
-      'Incompatible validation model',
+      'INCOMPATIBLE_MODEL',
     ],
     [{ ...props, requiresConfirmation: true }, 'CONFIRMATION_REQUIRED'],
   ])(
