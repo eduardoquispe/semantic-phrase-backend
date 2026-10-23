@@ -11,13 +11,11 @@ import { AiUnavailableError } from '../errors/ai-unavailable.error';
 
 @Injectable()
 export class HuggingFaceEmbeddingAdapter
-  extends EmbeddingGeneratorPort
-  implements OnModuleInit
+  implements EmbeddingGeneratorPort, OnModuleInit
 {
   private readonly embeddings: OpenAIEmbeddings;
 
   constructor(private readonly config: ConfigurationPort) {
-    super();
     this.embeddings = new OpenAIEmbeddings({
       model: config.get<string>('AI_MODEL'),
       apiKey: '',

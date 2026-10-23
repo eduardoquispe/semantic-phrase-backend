@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigurationPort } from '../../application/ports/outbound/configuration.port';
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { DATABASE_CONNECTION_TIMEOUT_MS } from './database.constants';
 
 @Injectable()
 export class DatabaseProvider implements OnApplicationShutdown {
@@ -25,7 +26,10 @@ export class DatabaseProvider implements OnApplicationShutdown {
       throw new Error('DATABASE_URL must be a PostgreSQL URL');
     }
     this.client = drizzle({
-      connection: { connectionString, connectionTimeoutMillis: 5000 },
+      connection: {
+        connectionString,
+        connectionTimeoutMillis: DATABASE_CONNECTION_TIMEOUT_MS,
+      },
     });
     this.client.$client.on('error', this.onPoolError);
   }
