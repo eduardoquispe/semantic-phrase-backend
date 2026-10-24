@@ -21,6 +21,7 @@ import { Embedding } from '../src/modules/phrases/domain/value-objects/embedding
 import { InvalidPhraseError } from '../src/modules/phrases/domain/errors/invalid-phrase.error';
 import { InvalidPhraseTextError } from '../src/modules/phrases/domain/errors/invalid-phrase-text.error';
 import { App } from 'supertest/types';
+import { PhraseNotFoundError } from '../src/modules/phrases/application/errors/phrase-not-found.error';
 import { InvalidEmbeddingError } from '../src/modules/phrases/domain/errors/invalid-embedding.error';
 import { NormalizedPhraseText } from '../src/modules/phrases/domain/value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../src/modules/phrases/domain/value-objects/phrase-model.value-object';
@@ -42,6 +43,7 @@ describe('GET /api/v1/phrases', () => {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
     save: jest.fn(),
+    softDelete: jest.fn(),
   };
   let rows: Phrase[] = [];
 
@@ -73,6 +75,7 @@ describe('GET /api/v1/phrases', () => {
   beforeEach(() => {
     rows = [];
     repository.list.mockReset();
+    repository.softDelete.mockReset();
     repository.list.mockImplementation((page: number, limit: number) =>
       Promise.resolve({
         data: rows.slice((page - 1) * limit, page * limit),
@@ -338,5 +341,76 @@ describe('GET /api/v1/phrases', () => {
       await request(app.getHttpServer()).get('/api/v1/phrases').expect(200);
     }
     expect(repository.list).toHaveBeenCalledTimes(61);
+  });
+
+  describe('DELETE /api/v1/phrases/:id', () => {
+    const id = '550e8400-e29b-41d4-a716-446655440000';
+
+    it('returns 204 without body and drops the phrase from the list', async () => {
+      seed(3);
+      repository.softDelete.mockImplementation((target: string) => {
+        const before = rows.length;
+        rows = rows.filter((row) => row.id !== target);
+        return Promise.resolve(rows.length < before);
+      });
+      const target = rows[0].id;
+      const response = await request(app.getHttpServer())
+        .delete(`/api/v1/phrases/${target}`)
+        .send({ ignored: true })
+        .expect(204);
+      expect(response.text).toBe('');
+      expect(repository.softDelete).toHaveBeenCalledWith(target);
+      const list = await request(app.getHttpServer())
+        .get('/api/v1/phrases')
+        .expect(200);
+      const body = list.body as ListPhrasesResponseDto;
+      expect(body.meta.total).toBe(2);
+      expect(body.data.map((row) => row.id)).not.toContain(target);
+    });
+
+    it('returns 404 PHRASE_NOT_FOUND when nothing matched', async () => {
+      repository.softDelete.mockResolvedValue(false);
+      const response = await request(app.getHttpServer())
+        .delete(`/api/v1/phrases/${id}`)
+        .expect(404);
+      expect(response.headers['content-type']).toMatch(
+        /application\/problem\+json/,
+      );
+      expect(response.body).toEqual({
+        title: 'Not Found',
+        status: 404,
+        detail: new PhraseNotFoundError().message,
+        code: 'PHRASE_NOT_FOUND',
+      });
+    });
+
+    it('returns 400 VALIDATION_ERROR for a non-UUID id', async () => {
+      const response = await request(app.getHttpServer())
+        .delete('/api/v1/phrases/abc')
+        .expect(400);
+      expect(response.body).toMatchObject({
+        status: 400,
+        code: 'VALIDATION_ERROR',
+      });
+      expect(repository.softDelete).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 DATABASE_ERROR on repository failure', async () => {
+      const log = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      repository.softDelete.mockRejectedValue(
+        new DatabaseError(new Error('secret SQL')),
+      );
+      const response = await request(app.getHttpServer())
+        .delete(`/api/v1/phrases/${id}`)
+        .expect(500);
+      expect(response.body).toMatchObject({
+        status: 500,
+        code: 'DATABASE_ERROR',
+      });
+      expect(JSON.stringify(response.body)).not.toMatch(/secret|SQL/);
+      expect(log).toHaveBeenCalled();
+    });
   });
 });

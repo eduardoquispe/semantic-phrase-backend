@@ -16,4 +16,5 @@ export abstract class PhraseRepositoryPort {
     input: ValidationSearchInput,
   ): Promise<ValidationMatch | null>;
   abstract list(page: number, limit: number): Promise<PhrasePageRows>;
+  abstract softDelete(id: string): Promise<boolean>;
 }

@@ -41,6 +41,7 @@ describe('POST /api/v1/phrase-validations', () => {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
     save: jest.fn(),
+    softDelete: jest.fn(),
   };
   const validations = { save: jest.fn() };
   const phrase = {
@@ -129,6 +130,13 @@ describe('POST /api/v1/phrase-validations', () => {
     expect(repository.list).not.toHaveBeenCalled();
     expect(generator.generate).toHaveBeenCalledTimes(1);
     expect(validations.save).toHaveBeenCalledTimes(1);
+  });
+  it('treats a collection with only deleted phrases as empty (no 500)', async () => {
+    // el repositorio filtra status = 1: sin activas devuelve null, no incompatible
+    repository.findValidationMatch.mockResolvedValueOnce(null);
+    const response = await post().expect(201);
+    expect((response.body as ValidationBody).data.match).toBeNull();
+    expect(saved).toHaveLength(1);
   });
   it.each([
     {},
@@ -275,6 +283,7 @@ describe('Validation with OpenAIEmbeddings and simulated TEI', () => {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
     save: jest.fn(),
+    softDelete: jest.fn(),
   };
   const validations = { save: jest.fn() };
 

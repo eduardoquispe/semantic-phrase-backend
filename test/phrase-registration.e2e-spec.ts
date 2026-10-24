@@ -67,6 +67,7 @@ describe('phrase registration HTTP flow', () => {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
     save: jest.fn(),
+    softDelete: jest.fn(),
   };
   const validations = {
     save: jest.fn(),

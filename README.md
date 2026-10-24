@@ -22,7 +22,9 @@ Migrations run only when requested. `pnpm run db:generate` generates a new Drizz
 
 ## API
 
-`GET /api/v1/phrases?page=1&limit=20` returns `data` with `id`, `text`, and `createdAt`, plus `meta` with `page`, `limit`, `total`, and `totalPages`. `page` starts at 1, `limit` ranges from 1 to 100, and only decimal digits are accepted. Invalid query input returns 400; database operation failures return 500 / `DATABASE_ERROR`; unexpected failures return 500. Errors use `application/problem+json`.
+`GET /api/v1/phrases?page=1&limit=20` returns `data` with `id`, `text`, and `createdAt`, plus `meta` with `page`, `limit`, `total`, and `totalPages`. `page` starts at 1, `limit` ranges from 1 to 100, and only decimal digits are accepted. Invalid query input returns 400; database operation failures return 500 / `DATABASE_ERROR`; unexpected failures return 500. Errors use `application/problem+json`. The list only includes active phrases.
+
+`DELETE /api/v1/phrases/{id}` soft-deletes a phrase (`status = 2`, `deleted_at` set; the row is kept). Returns 204 without body; 400 / `VALIDATION_ERROR` if `id` is not a UUID; 404 / `PHRASE_NOT_FOUND` if it does not exist or was already deleted; 500 / `DATABASE_ERROR` on database failure. Deleted phrases are ignored by `GET /api/v1/phrases` and `POST /api/v1/phrase-validations`; earlier validations that cite them are unchanged. Requires `pnpm run db:migrate` (migration `0002`). See [F004 quickstart](specs/004-soft-delete-phrases/quickstart.md).
 
 ## Checks
 

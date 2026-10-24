@@ -38,6 +38,7 @@ describe('CreatePhraseUseCase', () => {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
     save: jest.fn(),
+    softDelete: jest.fn(),
   };
   const useCase = new CreatePhraseUseCase(
     validations,

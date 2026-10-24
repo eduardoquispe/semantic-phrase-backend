@@ -5,7 +5,7 @@ import { SimilarityScore } from '../../../../domain/value-objects/similarity-sco
 import { ValidationSearchInput } from '../../../../application/ports/outbound/phrase-repository.port';
 import { DatabaseError } from '../../../../../../shared/infrastructure/database/errors/database.error';
 import { Injectable } from '@nestjs/common';
-import { desc, sql } from 'drizzle-orm';
+import { and, asc, cosineDistance, desc, eq, sql } from 'drizzle-orm';
 import {
   PhrasePageRows,
   PhraseRepositoryPort,
@@ -13,6 +13,7 @@ import {
 import { DatabaseProvider } from '../../../../../../shared/infrastructure/database/database.provider';
 import { DrizzlePhrasesModel } from './drizzle-phrases.model';
 import { DrizzlePhraseMapper } from './drizzle-phrase.mapper';
+import { PhraseStatusEnum } from '../../../../domain/enums/phrase-status.enum';
 import { ValidationMatchEnum } from '../../../../domain/enums/validation-match.enum';
 
 @Injectable()
@@ -37,38 +38,42 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
     const vectorMatch = await this.findVectorMatch(input);
     if (vectorMatch) return vectorMatch;
 
-    const { rows } = await this.database.client
-      .execute(
-        sql`
-      SELECT id FROM phrases LIMIT 1
-    `,
-      )
-      .catch((error: unknown) => {
-        throw new DatabaseError(error);
-      });
-    if (rows.length) throw new IncompatiblePhraseCollectionError();
+    let anyActive: { id: string } | undefined;
+    try {
+      [anyActive] = await this.database.client
+        .select({ id: DrizzlePhrasesModel.id })
+        .from(DrizzlePhrasesModel)
+        .where(eq(DrizzlePhrasesModel.status, PhraseStatusEnum.ACTIVE))
+        .limit(1);
+    } catch (error) {
+      throw new DatabaseError(error);
+    }
+    if (anyActive) throw new IncompatiblePhraseCollectionError();
     return null;
   }
 
   private async findTextualMatch(
     normalizedText: string,
   ): Promise<ValidationMatch | null> {
-    const { rows } = await this.database.client
-      .execute<{
-        id: string;
-        text: string;
-      }>(
-        sql`
-      SELECT id, text FROM phrases
-      WHERE normalized_text = ${normalizedText}
-      ORDER BY created_at DESC, id DESC LIMIT 1
-    `,
-      )
-      .catch((error: unknown) => {
-        throw new DatabaseError(error);
-      });
-
-    const match = rows[0];
+    let match: { id: string; text: string } | undefined;
+    try {
+      [match] = await this.database.client
+        .select({ id: DrizzlePhrasesModel.id, text: DrizzlePhrasesModel.text })
+        .from(DrizzlePhrasesModel)
+        .where(
+          and(
+            eq(DrizzlePhrasesModel.normalizedText, normalizedText),
+            eq(DrizzlePhrasesModel.status, PhraseStatusEnum.ACTIVE),
+          ),
+        )
+        .orderBy(
+          desc(DrizzlePhrasesModel.createdAt),
+          desc(DrizzlePhrasesModel.id),
+        )
+        .limit(1);
+    } catch (error) {
+      throw new DatabaseError(error);
+    }
     if (!match) return null;
 
     return {
@@ -81,28 +86,34 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
   private async findVectorMatch(
     input: ValidationSearchInput,
   ): Promise<ValidationMatch | null> {
-    const vector = JSON.stringify(input.embedding.values);
-    const { rows } = await this.database.client
-      .execute<{
-        id: string;
-        text: string;
-        distance: number;
-      }>(
-        sql`
-      SELECT id, text, embedding <=> ${vector}::vector AS distance
-      FROM phrases
-      WHERE model_id = ${input.model.id} AND model_version = ${input.model.version}
-      ORDER BY distance ASC, id ASC LIMIT 1
-    `,
-      )
-      .catch((error: unknown) => {
-        throw new DatabaseError(error);
-      });
-
-    const match = rows[0];
+    const distance = cosineDistance(
+      DrizzlePhrasesModel.embedding,
+      JSON.stringify(input.embedding.values),
+    );
+    let match: { id: string; text: string; distance: number } | undefined;
+    try {
+      [match] = await this.database.client
+        .select({
+          id: DrizzlePhrasesModel.id,
+          text: DrizzlePhrasesModel.text,
+          distance: sql<number>`${distance}`.as('distance'),
+        })
+        .from(DrizzlePhrasesModel)
+        .where(
+          and(
+            eq(DrizzlePhrasesModel.modelId, input.model.id),
+            eq(DrizzlePhrasesModel.modelVersion, input.model.version),
+            eq(DrizzlePhrasesModel.status, PhraseStatusEnum.ACTIVE),
+          ),
+        )
+        .orderBy(asc(distance), asc(DrizzlePhrasesModel.id))
+        .limit(1);
+    } catch (error) {
+      throw new DatabaseError(error);
+    }
     if (!match) return null;
 
-    let score = 1 - match.distance;
+    let score = 1 - Number(match.distance);
     if (score > 1 && score <= 1 + 1e-6) score = 1;
     if (score < -1 && score >= -1 - 1e-6) score = -1;
 
@@ -117,13 +128,16 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
     let count: { total: string };
     let rows: (typeof DrizzlePhrasesModel.$inferSelect)[];
     const offset = (page - 1) * limit;
+    const active = eq(DrizzlePhrasesModel.status, PhraseStatusEnum.ACTIVE);
     try {
       [count] = await this.database.client
         .select({ total: sql<string>`count(*)` })
-        .from(DrizzlePhrasesModel);
+        .from(DrizzlePhrasesModel)
+        .where(active);
       rows = await this.database.client
         .select()
         .from(DrizzlePhrasesModel)
+        .where(active)
         .orderBy(
           desc(DrizzlePhrasesModel.createdAt),
           desc(DrizzlePhrasesModel.id),
@@ -138,5 +152,26 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
       data: DrizzlePhraseMapper.toDomainMany(rows),
       total: Number(count.total),
     };
+  }
+
+  async softDelete(id: string): Promise<boolean> {
+    try {
+      const rows = await this.database.client
+        .update(DrizzlePhrasesModel)
+        .set({
+          status: PhraseStatusEnum.DELETED,
+          deletedAt: sql`now()`,
+        })
+        .where(
+          and(
+            eq(DrizzlePhrasesModel.id, id),
+            eq(DrizzlePhrasesModel.status, PhraseStatusEnum.ACTIVE),
+          ),
+        )
+        .returning({ id: DrizzlePhrasesModel.id });
+      return rows.length > 0;
+    } catch (error) {
+      throw new DatabaseError(error);
+    }
   }
 }
