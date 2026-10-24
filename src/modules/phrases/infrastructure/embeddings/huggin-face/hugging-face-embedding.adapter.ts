@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import {
   EmbeddingGeneratorPort,
@@ -14,6 +14,7 @@ import { AiUnavailableError } from '../errors/ai-unavailable.error';
 export class HuggingFaceEmbeddingAdapter
   implements EmbeddingGeneratorPort, OnModuleInit
 {
+  private readonly logger = new Logger(HuggingFaceEmbeddingAdapter.name);
   private readonly embeddings: OpenAIEmbeddings;
 
   constructor(private readonly config: ConfigurationPort) {
@@ -46,16 +47,26 @@ export class HuggingFaceEmbeddingAdapter
 
   async generate(text: string): Promise<GeneratedEmbedding> {
     try {
+      const modelName = this.config.getOrThrow<string>('AI_MODEL');
+      const embeddingVersion = this.config.getOrThrow<string>(
+        'AI_EMBEDDING_VERSION',
+      );
+
+      this.logger.log(
+        `Generating embedding: model=${modelName} chars=${text.length}`,
+      );
       const values = await this.embeddings.embedQuery(text);
+
+      this.logger.log(`Embedding generated: dimensions=${values.length}`);
 
       return {
         embedding: new Embedding(values),
-        model: new PhraseModel(
-          this.config.getOrThrow<string>('AI_MODEL'),
-          this.config.getOrThrow<string>('AI_EMBEDDING_VERSION'),
-        ),
+        model: new PhraseModel(modelName, embeddingVersion),
       };
-    } catch {
+    } catch (error) {
+      this.logger.error(
+        `Embedding generation failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw new AiUnavailableError();
     }
   }
