@@ -103,7 +103,6 @@ No se implementa registro ni consulta de validaciones en F002.
 | `DATABASE_URL`, `PORT`          | Conservar configuración existente                                                                                      |
 | `AI_EMBEDDINGS_URL`             | Obligatoria HTTP(S), sin credenciales/query/fragmento; host `http://127.0.0.1:8080`, red Docker `http://embeddings:80` |
 | `AI_MODEL`                      | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, perfil fijo                                             |
-| `AI_MODEL_REVISION`             | `e8f8c211226b894fcb81acc59f3b34ba3efd5f42`                                                                             |
 | `AI_EMBEDDING_VERSION`          | Obligatoria, `tei-<sha256>` del descriptor contrastado manualmente por el operador                                     |
 | `AI_EMBEDDING_DIMENSIONS`       | `384`, rechazar otra dimensión                                                                                         |
 | `AI_SIMILARITY_THRESHOLD`       | Finito [-1,1], default `0.8538613695045911`                                                                            |

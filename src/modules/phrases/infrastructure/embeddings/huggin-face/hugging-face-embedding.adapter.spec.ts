@@ -48,6 +48,16 @@ describe('HuggingFaceEmbeddingAdapter', () => {
     );
   });
 
+  it('fails startup when configured dimensions differ from the supported ones', async () => {
+    const mismatched = new HuggingFaceEmbeddingAdapter(
+      new ConfigurationStub({ ...teiConfig, AI_EMBEDDING_DIMENSIONS: '768' }),
+    );
+    await expect(mismatched.onModuleInit()).rejects.toThrow(
+      'AI_EMBEDDING_DIMENSIONS must be 384',
+    );
+    expect(embedQuery).not.toHaveBeenCalled();
+  });
+
   it('performs startup inference before Nest initialization succeeds', async () => {
     const module = await Test.createTestingModule({
       providers: [

@@ -18,7 +18,7 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
   private readonly expectedModel: PhraseModel;
 
   constructor(
-    private readonly validations: PhraseValidationRepositoryPort,
+    private readonly phraseValidationsRepository: PhraseValidationRepositoryPort,
     private readonly phrases: PhraseRepositoryPort,
     private readonly config: ConfigurationPort,
   ) {
@@ -29,32 +29,35 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
   }
   async execute(input: CreatePhraseInput) {
     const text = PhraseText.forValidation(input.text).value;
-    const validation = await this.validations.findById(input.validationId);
+    const phraseValidation = await this.phraseValidationsRepository.findById(
+      input.validationId,
+    );
 
-    if (!validation) throw new PhraseRegistrationError('INVALID_VALIDATION_ID');
-    if (validation.isConsumed())
+    if (!phraseValidation)
+      throw new PhraseRegistrationError('INVALID_VALIDATION_ID');
+    if (phraseValidation.isConsumed())
       throw new PhraseRegistrationError('VALIDATION_ALREADY_USED');
-    if (validation.isExpired(new Date()))
+    if (phraseValidation.isExpired(new Date()))
       throw new PhraseRegistrationError('VALIDATION_EXPIRED');
-    if (!validation.matches(text))
+    if (!phraseValidation.matches(text))
       throw new PhraseRegistrationError('PHRASE_MISMATCH');
-    if (!validation.isCompatibleWith(this.expectedModel))
+    if (!phraseValidation.isCompatibleWith(this.expectedModel))
       throw new PhraseRegistrationError('INCOMPATIBLE_MODEL');
-    if (validation.needsConfirmation(input.confirmed === true))
+    if (phraseValidation.needsConfirmation(input.confirmed === true))
       throw new PhraseRegistrationError('CONFIRMATION_REQUIRED');
 
     const phrase = new Phrase({
       id: new PhraseId(randomUUID()),
-      text: validation.text,
-      normalizedText: validation.normalizedText,
-      embedding: validation.embedding,
-      modelId: validation.model.id,
-      modelVersion: validation.model.version,
+      text: phraseValidation.text,
+      normalizedText: phraseValidation.normalizedText,
+      embedding: phraseValidation.embedding,
+      modelId: phraseValidation.model.id,
+      modelVersion: phraseValidation.model.version,
       createdAt: new Date(),
     });
 
     await this.phrases.save(phrase);
-    await this.validations.update(validation.id, {
+    await this.phraseValidationsRepository.update(phraseValidation.id, {
       consumedAt: new Date(),
     });
     return phrase;

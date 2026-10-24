@@ -30,6 +30,14 @@ export class HuggingFaceEmbeddingAdapter
   }
 
   async onModuleInit(): Promise<void> {
+    const dimensions = Number(
+      this.config.getOrThrow<string | number>('AI_EMBEDDING_DIMENSIONS'),
+    );
+    if (dimensions !== Embedding.DIMENSIONS) {
+      throw new Error(
+        `AI_EMBEDDING_DIMENSIONS must be ${Embedding.DIMENSIONS}`,
+      );
+    }
     try {
       await this.generate('Comprobación de inicio.');
     } catch {

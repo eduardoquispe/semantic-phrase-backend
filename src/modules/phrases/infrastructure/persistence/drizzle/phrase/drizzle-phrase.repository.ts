@@ -91,6 +91,7 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
       JSON.stringify(input.embedding.values),
     );
     let match: { id: string; text: string; distance: number } | undefined;
+
     try {
       [match] = await this.database.client
         .select({
@@ -111,6 +112,7 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
     } catch (error) {
       throw new DatabaseError(error);
     }
+
     if (!match) return null;
 
     let score = 1 - Number(match.distance);
