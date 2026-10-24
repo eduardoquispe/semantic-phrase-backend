@@ -28,33 +28,6 @@ function validationProps(): PhraseValidationProps {
 import { SimilarityScore } from '../../../../domain/value-objects/similarity-score.value-object';
 import { ValidationMatchEnum } from '../../../../domain/enums/validation-match.enum';
 describe('DrizzlePhraseValidationMapper', () => {
-  it('maps partial changes without clearing omitted fields or changing identity', () => {
-    const consumedAt = new Date();
-    expect(
-      DrizzlePhraseValidationMapper.toPartialPersistence({ id, consumedAt }),
-    ).toEqual({ consumedAt });
-    expect(
-      DrizzlePhraseValidationMapper.toPartialPersistence({
-        consumedAt: null,
-        match: null,
-        requiresConfirmation: false,
-      }),
-    ).toEqual({
-      consumedAt: null,
-      matchedPhraseId: null,
-      similarityScore: null,
-      requiresConfirmation: false,
-    });
-  });
-  it('maps all editable fields with their persistence representations', () => {
-    const validation = new PhraseValidation(validationProps());
-    const { id: ignoredId, ...expected } =
-      DrizzlePhraseValidationMapper.toPersistence(validation);
-    expect(ignoredId).toBe(id);
-    expect(
-      DrizzlePhraseValidationMapper.toPartialPersistence(validation),
-    ).toEqual(expected);
-  });
   it.each([null, -0.7, 0.9])(
     'maps exact original, embedding, model and dates (%s)',
     (score) => {

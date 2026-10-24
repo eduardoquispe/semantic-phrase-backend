@@ -3,7 +3,7 @@
 **Input**: spec.md, plan.md, data-model.md, research.md, contracts/ y quickstart.md de `specs/003-register-phrases-hitl/`.
 **Prerequisites**: Backend F001/F002 y `.specify/memory/constitution.md`.
 **Criterio de implementación**: Lo básico, claro y funcional. Reutilizar los componentes existentes y escribir funciones cortas con condiciones directas. Cada regla se implementa una vez; cada prueba debe comprobar un comportamiento útil. No añadir validaciones defensivas para estados ajenos al contrato ni combinaciones exhaustivas de errores.
-**Tests**: Unitarias para reglas y HTTP para el contrato. Verificar construcción, orden, fallos y persistencia parcial; no crear infraestructura de pruebas nueva.
+**Tests**: Unitarias para reglas y HTTP para el contrato. Verificar construcción, atomicidad, rollback y fallos; no crear infraestructura de pruebas nueva.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -34,7 +34,7 @@ Rutas relativas al backend. `[P]` indica archivos distintos que pueden trabajars
 - [X] T006 [P] [US1] Escribir los casos de éxito de CreatePhraseUseCase en `src/modules/phrases/application/use-cases/create-phrase.use-case.spec.ts`: confirmed omitido equivale a false, usa el modelo esperado y delega el registro sin inferencia ni búsqueda.
 - [X] T007 [P] [US1] Crear `test/phrase-registration.e2e-spec.ts` con configureApp y dobles existentes para validar → registrar → listar; comprobar 201 exactamente con data.id/text/createdAt, colección vacía/candidata bajo umbral y confirmed omitido/false/true. Reutilizar esta suite para las historias siguientes.
 - [X] T008 Implementar CreatePhraseUseCase: leer y validar comprobante, construir Phrase con datos almacenados y esperar phrases.save y validations.update en ese orden.
-- [X] T009 Añadir INSERT normal a PhraseRepositoryPort/DrizzlePhraseRepository y UPDATE parcial por id, usado para consumedAt en registro a PhraseValidationRepositoryPort/DrizzlePhraseValidationRepository; conservar INSERT temporal. Eliminar puerto, adaptador y pruebas de registro especializado.
+- [X] T009 Crear `PhraseRegistrationPort` y `DrizzlePhraseRegistrationRepository` (transacción: UPDATE condicional de consumedAt + INSERT de la frase). Retirar `PhraseRepositoryPort.save` y `PhraseValidationRepositoryPort.update`; conservar INSERT temporal.
 - [X] T010 [US1] Crear `src/modules/phrases/infrastructure/http/dtos/create-phrase-request.dto.ts`, y `src/modules/phrases/infrastructure/http/dtos/create-phrase-response.dto.ts` siguiendo F002: IsValidPhraseText existente, IsUUID('4'), ValidateIf para omitir solo undefined e IsBoolean sin coerción, respuesta pública mínima. Nota (implementación): no existe `create-phrase-query.dto.ts`; la query no se declara y se ignora.
 - [X] T011 [US1] Crear `src/modules/phrases/infrastructure/http/filters/phrase-registration.filter.ts` para traducir motivos al catálogo del contrato y errores DTO: validationId inválido usa INVALID_VALIDATION_ID, resto VALIDATION_ERROR. Reutilizar el builder, errors[].messages[] y manejo técnico global; probar las traducciones en `src/modules/phrases/infrastructure/http/filters/phrase-registration.filter.spec.ts` sin repetir reglas del caso de uso.
 - [X] T012 [US1] Conectar POST 201 en `src/modules/phrases/infrastructure/http/controllers/phrases.controller.ts`, respuesta en `src/modules/phrases/infrastructure/http/mapper/phrases.mapper.ts` y dependencias en `src/modules/phrases/phrases.module.ts`; aplicar los filtros de registro e InvalidValidationTextFilter solo al POST. Configurar PhraseModel desde AI_MODEL/AI_EMBEDDING_VERSION y adaptar los tests existentes afectados por el nuevo puerto/dependencia, incluidos controller y mapper. Requiere T001 y T008–T011.
@@ -59,11 +59,11 @@ Rutas relativas al backend. `[P]` indica archivos distintos que pueden trabajars
 
 ## Phase 6: User Story 4 — Conservar integridad ante fallos y envíos simultáneos (P1)
 
-**Objetivo**: Propagar fallos de cada guardado, conservando la frase si falla el consumo.
-**Prueba independiente**: Un fallo de inserción no intenta consumir; un fallo de consumo conserva la frase. Solicitudes simultáneas pueden crear varias frases (sin garantía de registro único). Dos validaciones distintas pueden guardar el mismo texto.
+**Objetivo**: Registrar de forma atómica: todo o nada, y un solo registro por comprobante.
+**Prueba independiente**: Un fallo de cualquier escritura no guarda la frase ni consume; solicitudes simultáneas con el mismo comprobante producen una frase y un 409. Dos validaciones distintas pueden guardar el mismo texto.
 
-- [X] T017 Probar INSERT de frase, UPDATE parcial por id y traducción de errores. Adaptar dobles y HTTP: error de inserción sin consumo; error de consumo conserva frase; reenvío tras éxito rechazado.
-- [X] T018 Sustituir la comprobación transaccional anterior por pruebas de escrituras independientes; documentar ausencia de rollback y garantía de registro único concurrente. No se requiere harness de BD real para esta simplificación.
+- [X] T017 Probar `DrizzlePhraseRegistrationRepository` (transacción, orden, 0 filas, traducción de errores). Adaptar dobles y HTTP: fallo de `register` no guarda ni consume; reenvío tras éxito rechazado.
+- [X] T018 Documentar la transacción única, el rollback y la garantía de registro único concurrente (UPDATE condicional). No se requiere harness de BD real; la atomicidad real se comprueba manualmente.
 
 ## Phase 7: User Story 5 — Aplicar la misma entrada admisible del flujo previo (P1)
 
@@ -107,4 +107,4 @@ T003 puede avanzar junto a T002. T021 puede avanzar junto a la revisión final, 
 
 Completar preparación y fundamentos, entregar US1 como MVP funcional y continuar con las historias en orden. Reutilizar las mismas reglas y suites. Mantener los dos repositorios existentes, funciones pequeñas y condiciones fáciles de seguir; no introducir abstracciones para casos futuros.
 
-Las pruebas con dobles acreditan reglas, secuencia, persistencia parcial y contrato HTTP; no acreditan unicidad concurrente. Cerrar cuando las comprobaciones requeridas pasen, informando cualquier pendiente. La implementación y su evidencia de pruebas están registradas en quickstart.md.
+Las pruebas con dobles acreditan reglas, secuencia de la transacción y contrato HTTP; la unicidad concurrente real se comprueba manualmente contra Postgres. Cerrar cuando las comprobaciones requeridas pasen, informando cualquier pendiente. La implementación y su evidencia de pruebas están registradas en quickstart.md.

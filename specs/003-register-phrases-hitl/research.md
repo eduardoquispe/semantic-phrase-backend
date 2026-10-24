@@ -2,11 +2,11 @@
 
 Investigación completada el 2026-10-22. Base: implementación actual, spec aprobada Q1–Q3, constitución y documentos 02/04/05/06/07 de `../../docs/03-architecture/`. No quedan aclaraciones pendientes.
 
-## 1. Extender los dos repositorios existentes
+## 1. Puerto de registro atómico
 
-**Decision**: Eliminar el puerto y adaptador de registro especializado. Añadir save(Phrase) al repositorio de frases y update(id, { consumedAt }) al temporal, conservando la creación de validaciones.
+**Decision**: Puerto de salida `PhraseRegistrationPort.register(phrase, validationId, consumedAt)` con adaptador Drizzle que abre una transacción: UPDATE condicional de `consumed_at` (solo si es nulo) e INSERT de la frase. Se retiran `PhraseRepositoryPort.save` y `PhraseValidationRepositoryPort.update`, que quedan sin uso.
 
-**Rationale**: La simplificación solicitada prioriza dos escrituras secuenciales y acepta persistencia parcial y duplicados concurrentes. Sustituye la decisión anterior de atomicidad.
+**Rationale**: Evita persistencia parcial (frase guardada con comprobante sin consumir) y cierra la carrera de duplicados. La operación toca dos tablas; un puerto propio mantiene a cada repositorio dueño de su tabla y evita exponer `tx` al caso de uso. Sustituye la simplificación de dos escrituras secuenciales.
 
 ## 2. Leer el resultado conservado sin recalcularlo
 
@@ -18,13 +18,13 @@ Investigación completada el 2026-10-22. Base: implementación actual, spec apro
 
 ## 3. Coordinación en aplicación
 
-**Decision**: Leer y validar el comprobante, construir Phrase y esperar INSERT antes del UPDATE de consumedAt. Retornar al terminar ambos guardados.
+**Decision**: Leer y validar el comprobante, construir Phrase y esperar `register(...)`. Retornar al terminar la transacción.
 
-**Rationale**: Si falla INSERT no se consume; si falla UPDATE la frase queda guardada y el error se propaga. No hay compensación ni garantía de registro único concurrente; reintentos pueden duplicar.
+**Rationale**: Si falla cualquier escritura se revierte todo y el error se propaga; el reintento es seguro. Si otra solicitud ya consumió el comprobante, el UPDATE condicional no afecta filas y se devuelve VALIDATION_ALREADY_USED.
 
 ## 4. Reloj de aplicación
 
-**Decision**: Comprobar vencimiento inclusivo con Date en aplicación antes de escribir. Asignar createdAt al construir y consumedAt después de insertar. Sin reloj de BD ni nueva comprobación tras bloqueos.
+**Decision**: Comprobar vencimiento inclusivo con Date en aplicación antes de escribir. Asignar createdAt al construir y consumedAt al llamar a `register`. Sin reloj de BD ni nueva comprobación tras bloqueos.
 
 ## 5. Compatibilidad de modelo sin inferencia
 
@@ -44,9 +44,9 @@ Investigación completada el 2026-10-22. Base: implementación actual, spec apro
 
 ## 7. Esquema, auditoría y pruebas
 
-**Decision**: Reutilizar tablas/PK/vector existentes; ningún DDL nuevo. Copiar vector y normalizado almacenados sin renormalizar. Consumo temporal sin FK ni auditoría permanente. Unitarias + HTTP exigidas por constitución con pruebas de orden y fallos de cada guardado.
+**Decision**: Reutilizar tablas/PK/vector existentes; ningún DDL nuevo. Copiar vector y normalizado almacenados sin renormalizar. Consumo temporal sin FK ni auditoría permanente. Unitarias + HTTP exigidas por constitución con pruebas de transacción (orden, rollback y fallos de cada escritura).
 
-**Rationale**: Q1 permite eliminación manual del comprobante sin afectar la frase. El diseño existente ya tiene `consumed_at`; no hace falta historial. No se prometen rollback ni exclusividad concurrente.
+**Rationale**: Q1 permite eliminación manual del comprobante sin afectar la frase. El diseño existente ya tiene `consumed_at`; no hace falta historial. El rollback y la exclusividad concurrente los da la transacción con UPDATE condicional.
 
 **Alternatives considered**: tabla de historial, confirmed permanente, índice único textual, Testcontainers o base de integración nueva. Fuera del alcance aprobado.
 

@@ -12,6 +12,8 @@ import { configureApp } from '../src/configure-app';
 import { teiConfig } from './fixtures/tei';
 import { EmbeddingGeneratorPort } from '../src/modules/phrases/application/ports/outbound/embedding-generator.port';
 import { PhraseRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-repository.port';
+import { PhraseRegistrationPort } from '../src/modules/phrases/application/ports/outbound/phrase-registration.port';
+import { PhraseRegistrationError } from '../src/modules/phrases/application/errors/phrase-registration.error';
 import { PhraseValidationRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-validation-repository.port';
 import { PhraseValidation } from '../src/modules/phrases/domain/entities/phrase-validation.entity';
 import { Phrase } from '../src/modules/phrases/domain/entities/phrase.entity';
@@ -65,14 +67,13 @@ describe('phrase registration HTTP flow', () => {
   const repository = {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
-    save: jest.fn(),
     softDelete: jest.fn(),
   };
   const validations = {
     save: jest.fn(),
-    update: jest.fn(),
     findById: jest.fn(),
   };
+  const registration = { register: jest.fn() };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigurationPort)
@@ -89,6 +90,8 @@ describe('phrase registration HTTP flow', () => {
       .useValue(repository)
       .overrideProvider(PhraseValidationRepositoryPort)
       .useValue(validations)
+      .overrideProvider(PhraseRegistrationPort)
+      .useValue(registration)
       .compile();
     app = module.createNestApplication();
     configureApp(app);
@@ -110,19 +113,23 @@ describe('phrase registration HTTP flow', () => {
       stored.set(v.id, v);
       return Promise.resolve();
     });
-    validations.update.mockImplementation(
-      (id: string, changes: Partial<PhraseValidationProps>) => {
-        stored.set(id, rebuild(stored.get(id)!, changes));
-        return Promise.resolve();
-      },
-    );
     validations.findById.mockImplementation((id: string) =>
       Promise.resolve(stored.get(id) ?? null),
     );
-    repository.save.mockImplementation((phrase: Phrase) => {
-      phrases.push(phrase);
-      return Promise.resolve();
-    });
+    registration.register.mockImplementation(
+      (phrase: Phrase, validationId: string, consumedAt: Date) => {
+        if (stored.get(validationId)?.consumedAt)
+          return Promise.reject(
+            new PhraseRegistrationError('VALIDATION_ALREADY_USED'),
+          );
+        stored.set(
+          validationId,
+          rebuild(stored.get(validationId)!, { consumedAt }),
+        );
+        phrases.push(phrase);
+        return Promise.resolve();
+      },
+    );
   });
   const post = (body: object, query = '') =>
     request(app.getHttpServer())
@@ -265,7 +272,7 @@ describe('phrase registration HTTP flow', () => {
       );
       expect(stored.get(validationId)).toEqual(state);
       expect(phrases).toHaveLength(0);
-      expect(repository.save).not.toHaveBeenCalled();
+      expect(registration.register).not.toHaveBeenCalled();
     },
   );
   it.each([
@@ -315,17 +322,17 @@ describe('phrase registration HTTP flow', () => {
       'DATABASE_ERROR',
     ],
     [
-      'insert',
+      'register',
       new DatabaseError(new Error('secret SQL credentials')),
       'DATABASE_ERROR',
     ],
-    ['insert', new Error('secret SQL credentials'), 'INTERNAL_ERROR'],
+    ['register', new Error('secret SQL credentials'), 'INTERNAL_ERROR'],
   ] as const)(
     'handles technical failure safely during %s',
     async (stage, error, code) => {
       const validationId = await validate();
       const operation =
-        stage === 'read' ? validations.findById : repository.save;
+        stage === 'read' ? validations.findById : registration.register;
       operation.mockRejectedValueOnce(error);
       expectProblem(
         await post({ text: ' Hola ', validationId }).expect(500),
@@ -336,20 +343,33 @@ describe('phrase registration HTTP flow', () => {
       expect(phrases).toHaveLength(0);
     },
   );
-  it('keeps the inserted phrase when updating consumption fails', async () => {
+  it('stores nothing and keeps the validation usable when registration fails', async () => {
     const validationId = await validate();
-    validations.update.mockRejectedValueOnce(
-      new DatabaseError(new Error('consumption failed')),
+    registration.register.mockRejectedValueOnce(
+      new DatabaseError(new Error('transaction rolled back')),
     );
     expectProblem(
       await post({ text: ' Hola ', validationId }).expect(500),
       500,
       'DATABASE_ERROR',
     );
-    expect(phrases).toHaveLength(1);
+    expect(phrases).toHaveLength(0);
     expect(stored.get(validationId)?.consumedAt).toBeNull();
     await post({ text: ' Hola ', validationId }).expect(201);
-    expect(phrases).toHaveLength(2);
+    expect(phrases).toHaveLength(1);
+    expect(stored.get(validationId)?.consumedAt).not.toBeNull();
+  });
+  it('rejects with 409 when a concurrent request consumes the validation first', async () => {
+    const validationId = await validate();
+    registration.register.mockRejectedValueOnce(
+      new PhraseRegistrationError('VALIDATION_ALREADY_USED'),
+    );
+    expectProblem(
+      await post({ text: ' Hola ', validationId }).expect(409),
+      409,
+      'VALIDATION_ALREADY_USED',
+    );
+    expect(phrases).toHaveLength(0);
   });
   it('rejects resend after success and permits independent duplicate validations', async () => {
     const validationId = await validate();

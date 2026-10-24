@@ -5,7 +5,7 @@ import {
   CreatePhraseInput,
 } from '../ports/inbound/create-phrase.port';
 import { PhraseValidationRepositoryPort } from '../ports/outbound/phrase-validation-repository.port';
-import { PhraseRepositoryPort } from '../ports/outbound/phrase-repository.port';
+import { PhraseRegistrationPort } from '../ports/outbound/phrase-registration.port';
 import { randomUUID } from 'node:crypto';
 import { Phrase } from '../../domain/entities/phrase.entity';
 import { PhraseId } from '../../domain/value-objects/phrase-id.value-object';
@@ -19,7 +19,7 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
 
   constructor(
     private readonly phraseValidationsRepository: PhraseValidationRepositoryPort,
-    private readonly phrases: PhraseRepositoryPort,
+    private readonly registration: PhraseRegistrationPort,
     private readonly config: ConfigurationPort,
   ) {
     this.expectedModel = new PhraseModel(
@@ -56,10 +56,7 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
       createdAt: new Date(),
     });
 
-    await this.phrases.save(phrase);
-    await this.phraseValidationsRepository.update(phraseValidation.id, {
-      consumedAt: new Date(),
-    });
+    await this.registration.register(phrase, phraseValidation.id, new Date());
     return phrase;
   }
 }

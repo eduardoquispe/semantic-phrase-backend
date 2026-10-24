@@ -78,9 +78,9 @@ Como persona que guarda una frase, quiero recibir éxito cuando terminen la inse
 
 **Acceptance Scenarios**:
 
-1. **Given** un fallo de inserción, **When** se solicita registrar, **Then** se propaga el error y no se intenta consumir la validación.
-2. **Given** una frase insertada, **When** falla el guardado del consumo, **Then** se propaga el error y la frase permanece insertada, sin compensación. Un reintento puede crear otra frase.
-3. **Given** dos solicitudes que leen la misma validación pendiente, **When** se registran simultáneamente, **Then** ambas pueden insertar frases; no existe garantía de registro único.
+1. **Given** un fallo de inserción, **When** se solicita registrar, **Then** se revierte la transacción: no se guarda la frase ni se consume la validación, y se propaga el error.
+2. **Given** un fallo al guardar el consumo, **When** se solicita registrar, **Then** se revierte la transacción: la frase no queda guardada y un reintento es seguro.
+3. **Given** dos solicitudes que leen la misma validación pendiente, **When** se registran simultáneamente, **Then** solo una guarda la frase; la otra recibe 409/`VALIDATION_ALREADY_USED`.
 4. **Given** consumo completado, **When** otra solicitud lee el comprobante, **Then** se rechaza con 409/`VALIDATION_ALREADY_USED` antes de escribir.
 5. **Given** dos validaciones diferentes aplicables, **When** se registran, **Then** pueden crear frases independientemente, sin unicidad global.
 6. **Given** una solicitud autorizada, **When** ambas escrituras terminan, **Then** se responde 201 conservando los datos almacenados sin nueva inferencia ni búsqueda.
@@ -126,7 +126,7 @@ Como cliente del backend, quiero que el registro respete las reglas de entrada d
 - **FR-007**: Una validación DEBE considerarse expirada al alcanzar su expiración. El registro NO DEBE prolongar vigencia ni sustituir una nueva validación por una confirmación.
 - **FR-008**: Leer y comprobar el comprobante en aplicación, construir la frase con sus datos y ejecutar secuencialmente phrases.save(phrase) y validations.update(id, { consumedAt }). Retornar tras ambas llamadas.
 - **FR-009**: Rechazar consumo previo observado en la lectura. No hay garantía de registro único ante solicitudes concurrentes ni revalidación durante las escrituras.
-- **FR-010**: No usar transacción ni compensación. Un fallo de inserción impide consumir; un fallo de consumo se propaga conservando la frase insertada.
+- **FR-010**: Guardar la frase y consumir la validación en una única transacción (todo o nada). El consumo es condicional a que la validación no esté consumida; si ya lo estaba se rechaza con 409/`VALIDATION_ALREADY_USED`.
 - **FR-011**: El sistema DEBE guardar el original validado, su texto normalizado con las reglas existentes, la misma representación semántica y modelo/versión. NO DEBE repetir inferencia, normalizar de nuevo el vector, buscar otra coincidencia ni reevaluar el umbral.
 - **FR-012**: El éxito DEBE responder 201 con exactamente `{data: {id, text, createdAt}}`; identificador UUID v4 y fecha/hora con zona horaria. NO DEBE exponer vectores, texto normalizado, modelo ni datos de validación.
 - **FR-013**: Los errores DEBEN usar `application/problem+json` con `title`, `status`, `detail`, `code` y opcionalmente `errors: [{field, messages: string[]}]`, sin `type` explícito, `timestamp`, `traceId`, secretos ni trazas. El estado HTTP DEBE coincidir con `status`.

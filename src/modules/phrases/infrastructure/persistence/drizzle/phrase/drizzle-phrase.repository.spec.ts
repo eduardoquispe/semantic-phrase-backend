@@ -1,8 +1,5 @@
 import { DrizzlePhraseMapper } from './drizzle-phrase.mapper';
 import { InvalidPhraseValidationError } from '../../../../domain/errors/invalid-phrase-validation.error';
-import { Phrase } from '../../../../domain/entities/phrase.entity';
-import { PhraseId } from '../../../../domain/value-objects/phrase-id.value-object';
-import { PhraseText } from '../../../../domain/value-objects/phrase-text.value-object';
 import { DrizzlePhrasesModel } from './drizzle-phrases.model';
 import { teiConfig } from '../../../../../../../test/fixtures/tei';
 import { IncompatiblePhraseCollectionError } from '../../../../application/errors/incompatible-phrase-collection.error';
@@ -157,74 +154,6 @@ describe('findValidationMatch', () => {
       }
     },
   );
-});
-
-describe('save phrase', () => {
-  const values = jest.fn();
-  const insert = jest.fn(() => ({ values }));
-  const repository = new DrizzlePhraseRepository({
-    client: { insert },
-  } as unknown as DatabaseProvider);
-  const phrase = new Phrase({
-    id: new PhraseId('550e8400-e29b-41d4-a716-446655440000'),
-    text: PhraseText.forValidation(' Hola '),
-    normalizedText: 'stored-normalized',
-    embedding: new Embedding(Array<number>(384).fill(0.25)),
-    modelId: 'MiniLM',
-    modelVersion: 'v1',
-    createdAt: new Date('2026-10-22T12:00:00Z'),
-  });
-  beforeEach(() => jest.clearAllMocks());
-  it('awaits a normal INSERT with all stored phrase data', async () => {
-    let finish!: () => void;
-    values.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        finish = resolve;
-      }),
-    );
-    let saved = false;
-    const pending = repository.save(phrase).then(() => {
-      saved = true;
-    });
-    await Promise.resolve();
-    expect(saved).toBe(false);
-    expect(insert).toHaveBeenCalledTimes(1);
-    expect(insert).toHaveBeenCalledWith(DrizzlePhrasesModel);
-    expect(values).toHaveBeenCalledWith({
-      id: phrase.id,
-      text: ' Hola ',
-      normalizedText: 'stored-normalized',
-      embedding: JSON.stringify(phrase.embedding.values),
-      modelId: 'MiniLM',
-      modelVersion: 'v1',
-      createdAt: phrase.createdAt,
-    });
-    finish();
-    await pending;
-    expect(saved).toBe(true);
-  });
-  it('propagates mapping failures before INSERT', async () => {
-    const error = new Error('mapping failure');
-    const mapper = jest
-      .spyOn(DrizzlePhraseMapper, 'toPersistence')
-      .mockImplementationOnce(() => {
-        throw error;
-      });
-    await expect(repository.save(phrase)).rejects.toBe(error);
-    expect(insert).not.toHaveBeenCalled();
-    mapper.mockRestore();
-  });
-  it.each([
-    [{ cause: { code: 'ECONNRESET' } }, DatabaseError],
-    [new Error('SQL'), DatabaseError],
-    [{ code: '23505', detail: 'private constraint data' }, DatabaseError],
-  ])('propagates insert errors', async (error, kind) => {
-    values.mockRejectedValueOnce(error);
-    await expect(repository.save(phrase)).rejects.toMatchObject({
-      name: kind.name,
-      cause: error,
-    });
-  });
 });
 
 describe('list phrases', () => {

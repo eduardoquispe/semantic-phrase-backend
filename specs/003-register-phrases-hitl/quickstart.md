@@ -76,15 +76,15 @@ El corpus vacío se comprueba solo en entorno controlado vacío, sin vaciar la c
 
 ## 3. Verificación de la simplificación
 
-El flujo actual usa dos repositorios y escrituras secuenciales sin transacción ni compensación. La evidencia anterior del adaptador transaccional ya no acredita el comportamiento actual y se retira de este documento.
+El flujo usa `PhraseRegistrationPort`: una transacción con UPDATE condicional de consumedAt e INSERT de la frase.
 
-- Unitarias: construcción fiel de Phrase, UUID/fecha nuevos, comprobaciones previas, espera de INSERT antes de consumo y retorno después de ambas llamadas.
-- Persistencia: INSERT normal de Phrase y UPDATE parcial por id por id; se conservan pruebas de creación de validaciones.
-- Fallos: INSERT fallido no intenta consumo; consumo fallido propaga error conservando la frase. HTTP cubre persistencia parcial y posible duplicación al reintentar.
-- Concurrencia: dos peticiones que leen el comprobante pendiente pueden crear dos frases. No se vuelve a comprobar expiración o consumo tras esperar escrituras.
+- Unitarias: construcción fiel de Phrase, UUID/fecha nuevos, comprobaciones previas, una sola llamada a `register` y retorno después de ella.
+- Persistencia: adaptador con dobles de `client.transaction`: orden UPDATE→INSERT, 0 filas → VALIDATION_ALREADY_USED sin INSERT, fallos envueltos en DatabaseError; se conservan pruebas de creación de validaciones.
+- Fallos: cualquier fallo de `register` no guarda ni consume nada; HTTP cubre 500 con reintento exitoso y 409 por consumo concurrente.
+- Concurrencia: el UPDATE condicional dentro de la transacción deja pasar solo una de dos peticiones simultáneas; la otra recibe 409. No se vuelve a comprobar expiración tras leer.
 - Un consumo previo observado al leer continúa produciendo VALIDATION_ALREADY_USED.
 
-No se requieren migraciones, dependencias nuevas ni comprobación manual de garantías transaccionales retiradas. Los E2E usan dobles de repositorios, no PostgreSQL real.
+No se requieren migraciones ni dependencias nuevas. Los E2E usan dobles de puertos, no PostgreSQL real: la atomicidad real se comprueba manualmente contra Postgres (doble POST simultáneo → un 201 y un 409).
 
 ## 4. Resultados de verificación
 

@@ -8,9 +8,9 @@
 
 ## Summary
 
-`CreatePhraseUseCase` lee y comprueba el comprobante, construye `Phrase` con UUID y fecha nuevos y los datos almacenados, llama a `PhraseRepositoryPort.save(phrase)` y después a `PhraseValidationRepositoryPort.update(id, { consumedAt })`. Devuelve la frase tras ambas llamadas; el contrato 201 permanece igual.
+`CreatePhraseUseCase` lee y comprueba el comprobante, construye `Phrase` con UUID y fecha nuevos y los datos almacenados, llama a `PhraseRegistrationPort.register(phrase, validationId, consumedAt)`. Devuelve la frase tras la transacción; el contrato 201 permanece igual.
 
-Sin transacción ni compensación: si falla el INSERT no se consume; si falla el consumo se propaga el error y permanece la frase. No se garantiza registro único concurrente. Esta decisión autorizada sustituye los requisitos transaccionales anteriores y las referencias compartidas. Sin migraciones ni nuevas dependencias.
+Transacción única en el adaptador Drizzle: UPDATE condicional de `consumed_at` (solo si es nulo) e INSERT de la frase; si cualquier paso falla se revierte todo, y si el UPDATE no afecta filas se lanza VALIDATION_ALREADY_USED. Garantiza registro único por comprobante aun con concurrencia. Sin migraciones ni nuevas dependencias.
 
 ## Technical Context
 
@@ -95,7 +95,7 @@ Pruebas unitarias junto a los componentes afectados. No reproducir árboles anti
 
 ## Phase 0 — Research
 
-Decisiones actualizadas en [research.md](research.md): dos escrituras independientes y comprobaciones en aplicación.
+Decisiones actualizadas en [research.md](research.md): puerto de registro atómico (transacción) y comprobaciones en aplicación.
 
 ## Phase 1 — Design
 
@@ -105,9 +105,8 @@ Decisiones actualizadas en [research.md](research.md): dos escrituras independie
 2. `findById` devuelve la entidad `PhraseValidation` (no existe una proyección `StoredPhraseValidation`); el mapper conserva `requiresConfirmation`, `normalizedText`, `consumedAt`, modelo y vector persistidos.
 3. El modelo activo se construye en el constructor de `CreatePhraseUseCase` con `getOrThrow('AI_MODEL')` y `getOrThrow('AI_EMBEDDING_VERSION')` (sin token `REGISTRATION_MODEL`) y la compatibilidad se comprueba en aplicación.
 4. Construir Phrase con UUID v4 y fecha nueva, copiando original, normalizado, embedding y modelo conservados.
-5. Esperar `phrases.save(phrase)`: INSERT normal mediante DrizzlePhraseMapper.
-6. Esperar `validations.update(id, { consumedAt: new Date() })`: UPDATE parcial por id, usado para consumedAt en registro. Conservar el INSERT de nuevas validaciones.
-7. Retornar Phrase. Propagar errores sin compensación; no volver a comprobar la fila ni imponer exclusividad concurrente.
+5. Esperar `registration.register(phrase, validation.id, new Date())`: transacción con UPDATE condicional de consumedAt (0 filas → VALIDATION_ALREADY_USED) e INSERT mediante DrizzlePhraseMapper. Conservar el INSERT de nuevas validaciones.
+6. Retornar Phrase. Los errores revierten la transacción y se propagan.
 
 ### Validaciones y errores mínimos
 

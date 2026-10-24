@@ -22,9 +22,9 @@ La sincronización T001 se completó durante la implementación con permiso de e
 - Los parámetros de query no declarados se ignoran; body con propiedades adicionales rechazado (400).
 - UUID v4; ausencia o malformación usa INVALID_VALIDATION_ID. Otros errores DTO usan VALIDATION_ERROR. Cuando se mezclan causas el spec no impone precedencia.
 - Leer requiresConfirmation almacenado; solo true real satisface alerta. Normalización equivalente no satisface igualdad original.
-- La aplicación comprueba la fila leída antes de escribir; expiración inclusiva. INSERT de frase seguido de UPDATE de consumedAt, sin transacción ni segunda inferencia.
+- La aplicación comprueba la fila leída antes de escribir; expiración inclusiva. UPDATE condicional de consumedAt e INSERT de frase en una única transacción, sin segunda inferencia.
 - Fallos de conexión, SQL o restricciones de BD son 500/`DATABASE_ERROR`; fallos inesperados 500 seguro; modelo/versión incompatible 409 `INCOMPATIBLE_MODEL`. No AI_UNAVAILABLE propio de registro ni endpoint de cancelación.
 - Una respuesta perdida no permite repetir éxito con la misma referencia: un consumo previo observado produce ALREADY_USED en el reenvío.
-- Si falla INSERT, no se intenta consumo. Si falla consumo, se conserva la frase y se propaga el error, sin compensación. Reintentos y solicitudes concurrentes pueden crear varias frases; no hay idempotencia ni exclusividad garantizadas.
+- Si falla cualquier escritura se revierte todo (ni frase ni consumo) y se propaga el error. Solicitudes concurrentes con la misma validación: una tiene éxito y las demás reciben 409 `VALIDATION_ALREADY_USED`.
 
 Ejemplos y catálogo completo están en el YAML; validación ejecutable en [quickstart.md](../quickstart.md).

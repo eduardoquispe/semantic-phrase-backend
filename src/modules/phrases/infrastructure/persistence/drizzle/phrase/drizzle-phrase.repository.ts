@@ -1,4 +1,3 @@
-import { Phrase } from '../../../../domain/entities/phrase.entity';
 import { IncompatiblePhraseCollectionError } from '../../../../application/errors/incompatible-phrase-collection.error';
 import { ValidationMatch } from '../../../../domain/types/validation-match.type';
 import { SimilarityScore } from '../../../../domain/value-objects/similarity-score.value-object';
@@ -21,15 +20,6 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
   private readonly logger = new Logger(DrizzlePhraseRepository.name);
 
   constructor(private readonly database: DatabaseProvider) {}
-
-  async save(phrase: Phrase): Promise<void> {
-    const data = DrizzlePhraseMapper.toPersistence(phrase);
-    try {
-      await this.database.client.insert(DrizzlePhrasesModel).values(data);
-    } catch (error) {
-      throw new DatabaseError(error);
-    }
-  }
 
   async findValidationMatch(
     input: ValidationSearchInput,

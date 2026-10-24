@@ -11,7 +11,6 @@ export interface ValidationSearchInput extends GeneratedEmbedding {
   normalizedText: string;
 }
 export abstract class PhraseRepositoryPort {
-  abstract save(phrase: Phrase): Promise<void>;
   abstract findValidationMatch(
     input: ValidationSearchInput,
   ): Promise<ValidationMatch | null>;

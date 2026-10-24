@@ -13,6 +13,8 @@ import { DeletePhraseUseCase } from './application/use-cases/delete-phrase.use-c
 import { ListPhrasesPort } from './application/ports/inbound/list-phrases.port';
 import { PhraseRepositoryPort } from './application/ports/outbound/phrase-repository.port';
 import { ListPhrasesUseCase } from './application/use-cases/list-phrases.use-case';
+import { PhraseRegistrationPort } from './application/ports/outbound/phrase-registration.port';
+import { DrizzlePhraseRegistrationRepository } from './infrastructure/persistence/drizzle/phrase-registration/drizzle-phrase-registration.repository';
 import { DrizzlePhraseRepository } from './infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository';
 import { PhrasesController } from './infrastructure/http/controllers/phrases.controller';
 import { DrizzlePhraseValidationRepository } from './infrastructure/persistence/drizzle/phrase-validation/drizzle-phrase-validation.repository';
@@ -35,6 +37,10 @@ import { DrizzlePhraseValidationRepository } from './infrastructure/persistence/
     DeletePhraseUseCase,
     { provide: DeletePhrasePort, useExisting: DeletePhraseUseCase },
     { provide: PhraseRepositoryPort, useClass: DrizzlePhraseRepository },
+    {
+      provide: PhraseRegistrationPort,
+      useClass: DrizzlePhraseRegistrationRepository,
+    },
   ],
 })
 export class PhrasesModule {}

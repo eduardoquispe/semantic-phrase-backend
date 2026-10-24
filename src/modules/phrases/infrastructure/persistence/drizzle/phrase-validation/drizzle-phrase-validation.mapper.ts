@@ -22,40 +22,6 @@ export class DrizzlePhraseValidationMapper {
     });
   }
 
-  static toPartialPersistence(
-    validation: Partial<PhraseValidation>,
-  ): Partial<typeof DrizzlePhraseValidationsModel.$inferInsert> {
-    return {
-      ...(validation.text !== undefined && { text: validation.text.value }),
-      ...(validation.normalizedText !== undefined && {
-        normalizedText: validation.normalizedText,
-      }),
-      ...(validation.embedding !== undefined && {
-        embedding: JSON.stringify(validation.embedding.values),
-      }),
-      ...(validation.model !== undefined && {
-        modelId: validation.model.id,
-        modelVersion: validation.model.version,
-      }),
-      ...(validation.match !== undefined && {
-        matchedPhraseId: validation.match?.phrase.id ?? null,
-        similarityScore: validation.match?.similarityScore?.value ?? null,
-      }),
-      ...(validation.requiresConfirmation !== undefined && {
-        requiresConfirmation: validation.requiresConfirmation,
-      }),
-      ...(validation.createdAt !== undefined && {
-        createdAt: validation.createdAt,
-      }),
-      ...(validation.expiresAt !== undefined && {
-        expiresAt: validation.expiresAt,
-      }),
-      ...(validation.consumedAt !== undefined && {
-        consumedAt: validation.consumedAt,
-      }),
-    };
-  }
-
   static toPersistence(
     validation: PhraseValidation,
   ): typeof DrizzlePhraseValidationsModel.$inferInsert {
