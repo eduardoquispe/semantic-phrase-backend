@@ -5,7 +5,7 @@ con el adaptador mínimo proporcionado. Sustituye el diseño de cliente TEI prop
 
 - `@langchain/openai` 0.6.16 declara peer Core >=0.3.68 <0.4.0; conservar 0.3.79.
 - `configuration.baseURL` apunta a `<base>/v1`; el SDK llama a `/embeddings`.
-- `apiKey: 'tei-local'` satisface el constructor; no se usa una cuenta OpenAI.
+- `apiKey: ''` satisface el constructor; no se usa una cuenta OpenAI.
 - LangChain maxRetries=0; su implementación configura también el SDK con maxRetries=0.
 - Sin encodingFormat explícito, el SDK solicita base64 y decodifica float32.
 - TEI 1.9.4 normaliza en /v1/embeddings; truncation Right y prompt explícito None.

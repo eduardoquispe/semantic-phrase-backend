@@ -4,9 +4,10 @@ Cambio incompatible (2026-10-22): `validationId` sustituye a `validationToken`, 
 Se devuelve el UUID v4 aleatorio de la validación persistida, sin firma ni JWT.
 Los JWT anteriores dejan de formar parte del contrato; las filas existentes pueden
 referenciarse por su UUID. No hay migración ni secreto de firma requerido.
-El registro queda fuera de F002: deberá buscar por `validationId`, comprobar
-vigencia (`now >= expiresAt` implica expiración), texto, confirmación y estado no
-consumido, y consumir la validación atómicamente con el guardado de la frase.
+El registro queda fuera de F002: busca por `validationId`, comprueba
+vigencia (`now >= expiresAt` implica expiración), texto, modelo, confirmación y estado no
+consumido, y consume la validación en una escritura posterior al guardado de la frase
+(dos escrituras secuenciales, sin transacción; ver F003).
 TTL configurable inicialmente de 15 minutos; respuesta y fila comparten expiración.
 
 
@@ -21,8 +22,7 @@ y proporcionó el adaptador mínimo que debe usarse. Estas decisiones sustituyen
 el diseño inicial de un cliente TeiEmbeddings con transporte/validaciones propios.
 
 El adaptador crea una sola instancia de OpenAIEmbeddings con modelo configurado,
-apiKey ficticia tei-local, maxRetries 0, timeout SDK y baseURL configurable terminada
-en /v1. Al iniciar llama generate para comprobar inferencia. generate usa embedQuery,
+apiKey vacía (`''`), maxRetries 0, timeout SDK y baseURL `${AI_EMBEDDINGS_URL sin barras finales}/v1`. Al iniciar llama generate para comprobar inferencia. generate usa embedQuery,
 Embedding y PhraseModel; traduce fallos a AiUnavailableError. Sin fetch propio,
 consulta automática /info, ready, validación adicional de identidad/norma/cero,
 deadline adicional o aborto propio al cerrar. No se implementan nuevas capas.
@@ -35,13 +35,13 @@ deadline adicional o aborto propio al cerrar. No se implementan nuevas capas.
 - TEI CPU ARM64 1.9.4, modelo sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2,
   revisión e8f8c211226b894fcb81acc59f3b34ba3efd5f42, mean, float32, 384.
 - URL host http://127.0.0.1:8080; red Docker http://embeddings:80.
-- Timeout obligatorio configurable, sin default; 5000 solo ejemplo. Umbral
-  0.8538613695045911; TTL 15 minutos; clave base64 >=32 bytes.
+- Timeout configurable (`AI_INFERENCE_TIMEOUT_MS`), sin default ni validación; 5000 solo ejemplo. Umbral
+  0.8538613695045911 y TTL 15 minutos (defaults en `ValidatePhraseUseCase`); sin clave de firma.
 
 ## Estructura y responsabilidades
 
 Mantener dominio, puertos, casos de uso y organización actual de persistencia
-bajo drizzle/phrase y drizzle/phrase-validation. La infraestructura de embeddings
+bajo drizzle/phrase y drizzle/phrase-validation. La infraestructura de embeddings (`infrastructure/embeddings/huggin-face/`)
 necesita solo HuggingFaceEmbeddingAdapter y su error existente. Configuración,
 composición y pruebas se adaptan sin añadir otro cliente/proveedor/puerto.
 Corregir imports relativos y descubrimiento drizzle/**/*.model.ts tras la
@@ -61,14 +61,14 @@ Cualquier ajuste del servicio existente requiere permiso del usuario; no crear
 otro despliegue ni tocar volúmenes. Verificar perfil manualmente antes de activar.
 
 AI_EMBEDDING_VERSION identifica el descriptor operativo canónico con tei-SHA256.
-La configuración valida formato, y el adaptador conserva esa versión; no la verifica
+El adaptador conserva `AI_EMBEDDING_VERSION` tal cual (no se valida su formato); no la verifica
 contra /info. Modelo/versión se mantienen fijos operativamente y se revisan al
 reiniciar. /info no certifica criptográficamente los pesos ni los prompts.
 
 ## Flujo y compatibilidad
 
-1. Validar configuración y completar una inferencia de inicio antes de escuchar.
-2. Validar texto/query; generar siempre embedding, también para textual/empty.
+1. Comprobar la dimensión y completar una inferencia de inicio antes de escuchar.
+2. Validar texto (la query no declarada se ignora); generar siempre embedding, también para textual/empty.
 3. Buscar textual primero; si no existe, Top-1 coseno con modelo/versión exactos.
    Textual: fecha DESC/UUID DESC; vector: distancia ASC/UUID ASC. Consultas
    parametrizadas secuenciales sin atribuir snapshot común.
@@ -78,7 +78,7 @@ reiniciar. /info no certifica criptográficamente los pesos ni los prompts.
 6. Error SDK/Embedding: 503 AI_UNAVAILABLE. BD (conexión, SQL o restricciones): 500 DATABASE_ERROR;
    incompatible: 500 INTERNAL_ERROR.
 
-Conservar Unicode 1–280 para validar, hasta 500 para lectura histórica F001,
+Unicode hasta 280, al menos 3 letras y sin emojis en toda capa (sin excepción de lectura),
 confirmación inclusiva, una candidata incluso bajo umbral, referencia UUID persistida,
 UUID v4 y fechas compartidas a segundos. No reetiquetar vectores Xenova; un corpus
 antiguo puede requerir regeneración manual fuera de F002. No backfill automático.

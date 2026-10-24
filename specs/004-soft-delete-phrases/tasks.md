@@ -25,7 +25,7 @@ description: "Task list for F004 — Eliminación lógica de frases"
 
 - [X] T002 [P] Crear `PhraseStatusEnum { ACTIVE = 1, DELETED = 2 }` en `src/modules/phrases/domain/enums/phrase-status.enum.ts`, mismo estilo que `validation-match.enum.ts`
 - [X] T003 Añadir columnas `status` (`smallint` NOT NULL default `1`, CHECK `status IN (1, 2)`; usando `PhraseStatusEnum`) y `deletedAt` (`timestamp with time zone`, nullable) a `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrases.model.ts`
-- [X] T004 Generar migración con `pnpm run db:generate` → `drizzle/migrations/0002_*.sql` (+ `meta/0002_snapshot.json`, `meta/_journal.json`); verificar que añada `status` (smallint NOT NULL DEFAULT 1) y `deleted_at`; incluir a mano el CHECK `status IN (1, 2)` si Drizzle no lo genera
+- [X] T004 Generar migración con `pnpm run db:generate` → `drizzle/migrations/0002_*.sql` (+ `meta/0002_snapshot.json`, `meta/_journal.json`); verificar que añada `status` (smallint NOT NULL DEFAULT 1) y `deleted_at`; Nota (implementación): Drizzle generó el CHECK `status IN (1, 2)`; no se añadió a mano
 
 **Checkpoint**: modelo y migración listos.
 
@@ -69,7 +69,7 @@ description: "Task list for F004 — Eliminación lógica de frases"
 ### Tests for US2
 
 - [X] T018 [US2] Ampliar `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository.spec.ts`: `findTextualMatch`, `findVectorMatch` y chequeo de colección no vacía incluyen `status = 1` (misma archivo que T006: no paralelo)
-- [X] T019 [P] [US2] E2E en `test/phrase-validations.e2e-spec.ts`: colección con todas eliminadas se trata como vacía (sin 500) y validación previa que cita frase eliminada no cambia el registro F003 (repositorio sustituido)
+- [X] T019 [P] [US2] E2E en `test/phrase-validations.e2e-spec.ts`: colección con todas eliminadas se trata como vacía (sin 500) Nota (implementación): solo existe el caso de colección con todas las frases eliminadas (`phrase-validations.e2e-spec.ts`); no hay un E2E específico de «validación previa que cita una frase eliminada» ni de registro F003 con ella (repositorio sustituido)
 
 ### Implementation for US2
 

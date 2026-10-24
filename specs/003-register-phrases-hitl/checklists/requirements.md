@@ -33,8 +33,8 @@
 
 - Revisión final: 16/16 criterios satisfechos tras incorporar Q1-A, Q2-A y Q3-A. Sin marcadores de aclaración; especificación lista para `$speckit-plan`.
 - Q1-A: alcance arquitectónico sin auditoría permanente y excepción al brief explícitamente aprobada. FR-017, entidades, dependencias y SC-010 reflejan esa decisión.
-- Q2-A: entrada alineada con F002, sin límite global ni 429. FR-018/FR-019, historia 5 y SC-009 cubren longitud, controles, signos, emojis y volumen; se preserva lectura histórica de F001.
-- Q3-A: referencia inexistente como 400/`INVALID_VALIDATION_ID`; incompatibilidad como 500/`INTERNAL_ERROR`. FR-014, historia 3 y catálogo cierran ambos casos sin códigos nuevos.
+- Q2-A: entrada alineada con F002, sin límite global ni 429. FR-018/FR-019, historia 5 y SC-009 cubren longitud, controles, letras mínimas, emojis y volumen; la lectura desde BD aplica la misma regla de texto.
+- Q3-A: referencia inexistente como 400/`INVALID_VALIDATION_ID`; incompatibilidad inicialmente como 500/`INTERNAL_ERROR` (el código final responde 409/`INCOMPATIBLE_MODEL`). FR-014, historia 3 y catálogo cierran ambos casos sin códigos nuevos.
 - Compatibilidad documentada antes de implementación: alinear posteriormente el OpenAPI de creación y las secciones afectadas del bloque 06. No quedan decisiones funcionales pendientes para planificar.
 - Rutas, campos y estados HTTP documentan contratos observables exigidos por el usuario y la constitución; no prescriben tecnologías, capas o algoritmos nuevos.
 - Hooks: `.specify/extensions.yml` no existe; no hay hooks previos ni posteriores que ejecutar.

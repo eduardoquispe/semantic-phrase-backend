@@ -8,8 +8,8 @@ El YAML compartido fue alineado durante T001: validación usa 280 puntos de cód
 
 | Ubicación en YAML compartido                 | Cambio exigido                                                                                                                                                                           |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ValidatePhraseRequest.properties.text`      | Referenciar esquema nuevo `ValidationPhraseText` con 1–280 puntos de código del original; trim no vacío y sin `Cc`; sin exigir letras                                                    |
-| `PhraseText` usado por `CreatePhraseRequest` | Conservar comportamiento contractual existente hasta planificar registro; no cambiar globalmente el componente a 280 como efecto colateral de F002                                       |
+| `ValidatePhraseRequest.properties.text`      | Referenciar esquema nuevo `ValidationPhraseText` con hasta 280 puntos de código del original; trim no vacío, al menos 3 letras, sin emojis ni `Cc`                                                    |
+| `PhraseText` usado por `CreatePhraseRequest` | `PhraseText` aplica la misma regla de texto (280, ≥3 letras, sin emojis) en todas las operaciones; sin excepción de lectura                                       |
 | `POST /phrase-validations.responses`         | Solo 201, 400, 500 y 503; quitar 429 de esta operación                                                                                                                                   |
 | `POST /phrase-validations.description`       | Explicitar incompatibilidad sin coincidencia textual como 500, colección vacía como éxito; textual prima y sigue requiriendo embedding válido                                            |
 | `FieldError`                                 | Reemplazar `message:string` por `messages:string[]`, ambos `field` y `messages` obligatorios; actualizar ejemplos compartidos para representar el formato ya implementado por el backend |
@@ -22,7 +22,7 @@ Swagger, si se incorpora en otra tarea, debe seguir leyendo el YAML compartido a
 
 ## Reglas adicionales comprobables
 
-- Body obligatorio JSON con únicamente `text`; rechazar query desconocida. Los esquemas expresan forma y máximo; trim y `Cc` requieren validación de ejecución.
+- Body obligatorio JSON con únicamente `text`; los parámetros de query no declarados se ignoran. Los esquemas expresan forma y máximo; trim, letras mínimas, emojis y `Cc` requieren validación de ejecución.
 - No autenticación, cabecera bearer ni token previo. El UUID temporal viaja en respuesta y luego se usará en el cuerpo del registro de otra funcionalidad.
 - Igualdad textual: candidata y score nulo, siempre confirmación. Vector: candidata y coseno incluso bajo umbral. Colección vacía: match nulo y sin confirmación.
 - `requiresConfirmation` vectorial usa comparación inclusiva con el umbral configurado. OpenAPI no prueba por sí solo esa regla dependiente de configuración.

@@ -16,9 +16,9 @@ Sin transacción ni compensación: si falla el INSERT no se consume; si falla el
 
 **Language/Version**: TypeScript 5.7, NestJS 11; runtime Node.js compatible con la aplicación existente.
 
-**Primary Dependencies**: Drizzle ORM 0.45.4, pg 8.23, class-validator 0.15, class-transformer 0.5, ConfigService y pnpm existentes. LangChain/TEI sigue siendo dependencia de F002; registro no lo invoca.
+**Primary Dependencies**: Drizzle ORM 0.45.4, pg 8.23, class-validator 0.15, class-transformer 0.5, `ConfigurationPort` (adaptador sobre ConfigService) y pnpm existentes. LangChain/TEI sigue siendo dependencia de F002; registro no lo invoca.
 
-**Storage**: PostgreSQL + pgvector, tablas existentes `phrases` y `phrase_validations`; vector de 384 componentes. Un pool compartido mediante `DatabaseProvider`.
+**Storage**: PostgreSQL + pgvector, tablas existentes `phrases` y `phrase_validations`; vector de 384 componentes. Un cliente Drizzle compartido mediante `DatabaseProvider`.
 
 **Testing**: Jest/ts-jest, pruebas cercanas y Supertest HTTP con `configureApp`; pruebas de orden, construcción, rechazos y fallos de ambas escrituras.
 
@@ -41,7 +41,7 @@ No quedan decisiones técnicas por aclarar; justificaciones y fuentes en [resear
 | I. Arquitectura modular hexagonal | PASS: ampliar `phrases`; aplicación depende de puertos | PASS: dos repositorios Drizzle existentes; sin ORM/DTO en aplicación ni framework en dominio |
 | II. Contratos explícitos | PASS: spec aprobada con Q1–Q3 | PASS: contrato local completo y cambios compartidos delimitados en `contracts/README.md`; sincronización previa a código HTTP |
 | III. Comportamiento probado | PASS: plan exige unitarias y HTTP | PASS: escenarios y comandos en quickstart, verificación de persistencia parcial con dobles |
-| IV. Dependencias simples | PASS: reutilizar implementación F001/F002 | PASS: dos puertos de repositorio existentes, una función de comprobación compartida, sin capas genéricas |
+| IV. Dependencias simples | PASS: reutilizar implementación F001/F002 | PASS: dos puertos de repositorio existentes, reglas de aplicabilidad como métodos de la entidad `PhraseValidation`, sin capas genéricas |
 | V. Configuración y secretos | PASS: configuración existente | PASS: reutilizar `AI_MODEL` y `AI_EMBEDDING_VERSION`; sin variable o secreto nuevo |
 
 No hay excepciones constitucionales. Q1-A es una excepción aprobada al brief sobre auditoría, no a la constitución. La discrepancia con OpenAPI compartido queda documentada como trabajo obligatorio de sincronización antes de implementar el endpoint; no se considera ya corregida.
@@ -70,7 +70,6 @@ specs/003-register-phrases-hitl/
 src/modules/phrases/
 ├── application/
 │   ├── errors/phrase-registration.error.ts
-│   ├── assert-validation-applicable.ts
 │   ├── ports/inbound/create-phrase.port.ts
 │   ├── ports/outbound/phrase-validation-repository.port.ts  # ampliar lectura
 │   ├── ports/outbound/phrase-repository.port.ts             # añadir save
@@ -79,7 +78,6 @@ src/modules/phrases/
 │   ├── http/
 │   │   ├── controllers/phrases.controller.ts               # añadir POST
 │   │   ├── dtos/create-phrase-request.dto.ts
-│   │   ├── dtos/create-phrase-query.dto.ts
 │   │   ├── dtos/create-phrase-response.dto.ts
 │   │   ├── filters/phrase-registration.filter.ts
 │   │   └── mapper/phrases.mapper.ts
@@ -103,9 +101,9 @@ Decisiones actualizadas en [research.md](research.md): dos escrituras independie
 
 ### Flujo de aplicación y persistencia
 
-1. DTO valida entrada y query con la configuración HTTP actual. `CreatePhraseUseCase` reutiliza `PhraseText.forValidation`, recupera `findById(validationId)` y comprueba aplicabilidad con la función pequeña `assertValidationApplicable`.
-2. El resultado de lectura es una proyección `StoredPhraseValidation` tipada en el puerto de validaciones; conserva `requiresConfirmation`, `normalizedText`, `consumedAt`, modelo y vector persistidos. No se reconstruye mediante el constructor de emisión de `PhraseValidation`, que hoy fija consumo a null y recalcula la alerta.
-3. Inyectar el modelo activo mediante REGISTRATION_MODEL desde ConfigService y comprobar compatibilidad en aplicación.
+1. El DTO valida el body con la configuración HTTP actual (la query no se declara y se ignora). `CreatePhraseUseCase` reutiliza `PhraseText.forValidation`, recupera `findById(validationId)` y comprueba aplicabilidad en línea con los métodos de la entidad `PhraseValidation` (`isConsumed`, `isExpired`, `matches`, `isCompatibleWith`, `needsConfirmation`), en este orden: existencia, consumida, expirada, texto, modelo, confirmación.
+2. `findById` devuelve la entidad `PhraseValidation` (no existe una proyección `StoredPhraseValidation`); el mapper conserva `requiresConfirmation`, `normalizedText`, `consumedAt`, modelo y vector persistidos.
+3. El modelo activo se construye en el constructor de `CreatePhraseUseCase` con `getOrThrow('AI_MODEL')` y `getOrThrow('AI_EMBEDDING_VERSION')` (sin token `REGISTRATION_MODEL`) y la compatibilidad se comprueba en aplicación.
 4. Construir Phrase con UUID v4 y fecha nueva, copiando original, normalizado, embedding y modelo conservados.
 5. Esperar `phrases.save(phrase)`: INSERT normal mediante DrizzlePhraseMapper.
 6. Esperar `validations.update(id, { consumedAt: new Date() })`: UPDATE parcial por id, usado para consumedAt en registro. Conservar el INSERT de nuevas validaciones.
@@ -115,8 +113,8 @@ Decisiones actualizadas en [research.md](research.md): dos escrituras independie
 
 - Reutilizar `IsValidPhraseText` en el DTO y `PhraseText.forValidation` en aplicación: misma regla que F002, sin otro validador de texto. Mantener el constructor histórico de 500 para lectura.
 - UUID v4 obligatorio mediante `IsUUID('4')`. `confirmed` usa `ValidateIf(value !== undefined)` e `IsBoolean`; no `IsOptional` porque también omite null, ni coerción `Type(() => Boolean)`.
-- DTO query vacío sigue el patrón existente y permite rechazar parámetros desconocidos con el pipe global. `forbidNonWhitelisted` rechaza campos ajenos.
-- Un único error de aplicación `PhraseRegistrationError` con motivo tipado para referencia, mismatch y conflictos; sin estados HTTP. Incompatibilidad/fallo inesperado llega al 500 seguro existente.
+- No hay DTO de query: los parámetros de consulta no declarados se ignoran. `forbidNonWhitelisted` rechaza campos ajenos en el body.
+- Un único error de aplicación `PhraseRegistrationError` con motivo tipado para referencia, mismatch y conflictos; sin estados HTTP. El motivo `INCOMPATIBLE_MODEL` se traduce a 409; un fallo inesperado llega al 500 seguro existente.
 - Un filtro de registro, aplicado solo al método POST, traduce motivos y `BadRequestException` del DTO. Si los errores de campos señalan `validationId`, usa `INVALID_VALIDATION_ID`; el resto mantiene `VALIDATION_ERROR` y `errors[].messages[]`. No alterar globalmente la clasificación 400 de F001/F002. Reutilizar builder y formato compartidos.
 - Reutilizar `InvalidValidationTextFilter` en POST para el error de `PhraseText`; las lecturas GET conservan sus filtros de datos persistidos. `DATABASE_ERROR` se traduce globalmente con el mecanismo existente; ningún filtro local debe absorber errores técnicos ajenos.
 

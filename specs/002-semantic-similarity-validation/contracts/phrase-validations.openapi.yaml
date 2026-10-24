@@ -12,7 +12,7 @@ paths:
       operationId: validatePhrase
       summary: Crear validación temporal sin registrar una frase
       description: |
-        Cuerpo y query sin propiedades ajenas al contrato. Genera siempre embedding
+        Cuerpo sin propiedades ajenas al contrato; la query no declarada se ignora. Genera siempre embedding
         válido MiniLM y prioriza igualdad textual. Sin igualdad textual, recupera
         Top-1 exacto compatible por coseno y aplica umbral configurable, inicialmente
         0.8538613695045911. Candidata vectorial se devuelve incluso bajo umbral.
@@ -41,14 +41,14 @@ paths:
                   value:
                     data:
                       validationId: '550e8400-e29b-41d4-a716-446655440000'
-                      expiresAt: '2026-10-22T15:15:00Z'
+                      expiresAt: '2026-10-22T15:15:00.000Z'
                       requiresConfirmation: false
                       match: null
                 textual:
                   value:
                     data:
                       validationId: '550e8400-e29b-41d4-a716-446655440000'
-                      expiresAt: '2026-10-22T15:15:00Z'
+                      expiresAt: '2026-10-22T15:15:00.000Z'
                       requiresConfirmation: true
                       match:
                         type: textual_exact
@@ -62,7 +62,7 @@ paths:
                   value:
                     data:
                       validationId: '550e8400-e29b-41d4-a716-446655440000'
-                      expiresAt: '2026-10-22T15:15:00Z'
+                      expiresAt: '2026-10-22T15:15:00.000Z'
                       requiresConfirmation: true
                       match:
                         type: vector
@@ -76,7 +76,7 @@ paths:
                   value:
                     data:
                       validationId: '550e8400-e29b-41d4-a716-446655440000'
-                      expiresAt: '2026-10-22T15:15:00Z'
+                      expiresAt: '2026-10-22T15:15:00.000Z'
                       requiresConfirmation: false
                       match:
                         type: vector
@@ -87,18 +87,18 @@ paths:
                           }
                         similarityScore: -0.1
         '400':
-          description: Texto inválido, propiedades desconocidas o query ajena al contrato
+          description: Texto inválido o propiedades desconocidas en el body
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
               example:
                 title: Bad Request
                 status: 400
-                detail: Los datos enviados no son válidos.
+                detail: Los parámetros de la solicitud no son válidos.
                 code: VALIDATION_ERROR
-                errors: [{ field: text, messages: ['Máximo 280 caracteres.'] }]
+                errors: [{ field: text, messages: ['text debe contener de 1 a 280 puntos de código Unicode, con al menos 3 letras, sin emojis, controles ni texto vacío.'] }]
         '500':
-          description: Fallo de BD, fallo inesperado, emisión fallida del token o corpus sin vectores compatibles y sin igualdad textual
+          description: Fallo de BD, fallo inesperado o corpus sin vectores compatibles y sin igualdad textual
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
@@ -133,11 +133,11 @@ components:
   schemas:
     ValidationPhraseText:
       type: string
-      minLength: 1
+      minLength: 3
       maxLength: 280
       description: |
         Puntos de código Unicode del texto original, incluidos espacios externos.
-        trim no debe quedar vacío. Rechazar categoría Unicode Cc; no exigir letras.
+        trim no debe quedar vacío. Exigir al menos 3 letras; rechazar emojis y categoría Unicode Cc.
         No modificar el original ni detectar idioma. Estas reglas adicionales
         se validan en ejecución, además de este esquema.
     ValidatePhraseRequest:

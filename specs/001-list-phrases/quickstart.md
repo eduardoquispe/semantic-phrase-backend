@@ -11,7 +11,7 @@ pnpm install
 cp .env.example .env
 ```
 
-Configurar `DATABASE_URL` en `.env` para PostgreSQL local y revisar los valores HTTP seguros documentados allí. La aplicación carga `.env` automáticamente mediante `ConfigModule` en `DatabaseModule`; las variables existentes del shell tienen prioridad. Drizzle CLI mantiene su configuración independiente y requiere exportar `DATABASE_URL` en el shell o usar un cargador de entorno. Desde la raíz del repositorio, iniciar la base existente:
+Configurar `DATABASE_URL` en `.env` para PostgreSQL local y revisar los valores HTTP seguros documentados allí. La aplicación carga `.env` automáticamente mediante el `ConfigurationModule` global (`ConfigModule.forRoot()`); las variables existentes del shell tienen prioridad. Drizzle CLI mantiene su configuración independiente y requiere exportar `DATABASE_URL` en el shell o usar un cargador de entorno. Desde la raíz del repositorio, iniciar la base existente:
 
 ```sh
 docker compose up -d postgres

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-22
 
-**Status**: Implementada; simplificación autorizada a dos repositorios con escrituras secuenciales.
+**Status**: Implementada; simplificación autorizada a dos repositorios con escrituras secuenciales. Revisión de alineación con el código (2026-10-24): modelo incompatible = 409/`INCOMPATIBLE_MODEL`; los parámetros de query no declarados se ignoran.
 
 Esta revisión sustituye las garantías de atomicidad, rollback y registro único concurrente del diseño anterior y de las fuentes compartidas citadas como contexto histórico.
 
@@ -63,8 +63,10 @@ Como cliente del backend, quiero conocer cuándo la validación no autoriza guar
 3. **Given** una validación pendiente, **When** el instante de comprobación alcanza o supera `expiresAt`, **Then** se responde 409/`VALIDATION_EXPIRED`, sin consumo ni registro.
 4. **Given** una validación ya consumida sin otras causas concurrentes de rechazo, **When** se reutiliza, **Then** se responde 409/`VALIDATION_ALREADY_USED`, sin crear otra frase.
 5. **Given** una referencia UUID v4 bien formada pero inexistente, **When** se solicita registrar, **Then** se responde 400/`INVALID_VALIDATION_ID`, sin crear una frase ni inferir expiración o consumo previo.
-6. **Given** una validación de modelo/versión incompatible, **When** se solicita registrar, **Then** se responde 500/`INTERNAL_ERROR` con mensaje seguro, sin crear una frase ni consumir la validación.
-7. **Given** una validación que expira o es consumida entre la comprobación previa y la operación efectiva, **When** se intenta registrar, **Then** se rechaza con el conflicto correspondiente sin crear una frase.
+6. **Given** una validación de modelo/versión incompatible con `AI_MODEL`/`AI_EMBEDDING_VERSION`, **When** se solicita registrar, **Then** se responde 409/`INCOMPATIBLE_MODEL`, sin crear una frase ni consumir la validación.
+7. **Given** una validación que expira o es consumida entre la comprobación previa y la operación efectiva, **When** se intenta registrar, **Then** no hay revalidación durante las escrituras (ver FR-009); solo se rechaza lo observado en la lectura previa.
+
+> Nota (implementación): el orden real de comprobación en `CreatePhraseUseCase` es existencia → consumida → expirada → texto exacto → modelo/versión → confirmación. Si coinciden varias causas, se informa la primera en ese orden (p. ej. una validación consumida y expirada responde `VALIDATION_ALREADY_USED`).
 
 ---
 
@@ -128,7 +130,7 @@ Como cliente del backend, quiero que el registro respete las reglas de entrada d
 - **FR-011**: El sistema DEBE guardar el original validado, su texto normalizado con las reglas existentes, la misma representación semántica y modelo/versión. NO DEBE repetir inferencia, normalizar de nuevo el vector, buscar otra coincidencia ni reevaluar el umbral.
 - **FR-012**: El éxito DEBE responder 201 con exactamente `{data: {id, text, createdAt}}`; identificador UUID v4 y fecha/hora con zona horaria. NO DEBE exponer vectores, texto normalizado, modelo ni datos de validación.
 - **FR-013**: Los errores DEBEN usar `application/problem+json` con `title`, `status`, `detail`, `code` y opcionalmente `errors: [{field, messages: string[]}]`, sin `type` explícito, `timestamp`, `traceId`, secretos ni trazas. El estado HTTP DEBE coincidir con `status`.
-- **FR-014**: El sistema DEBE aplicar el catálogo siguiente. Una referencia inexistente DEBE producir 400/`INVALID_VALIDATION_ID`; una validación de modelo/versión incompatible, 500/`INTERNAL_ERROR`. Ningún rechazo DEBE crear una frase o consumir la validación, ni comunicarse como éxito.
+- **FR-014**: El sistema DEBE aplicar el catálogo siguiente. Una referencia inexistente DEBE producir 400/`INVALID_VALIDATION_ID`; una validación de modelo/versión incompatible, 409/`INCOMPATIBLE_MODEL`. Ningún rechazo DEBE crear una frase o consumir la validación, ni comunicarse como éxito.
 - **FR-015**: Cancelar o abandonar sin solicitar registro NO DEBE crear frases ni estados de cancelación. F003 NO DEBE añadir endpoints de confirmación, revocación, renovación ni consulta de validaciones temporales.
 - **FR-016**: Validaciones diferentes pueden registrarse independientemente si son aplicables; no existe bloqueo global ni corpus inmutable.
 - **FR-017**: El sistema DEBE mantener el alcance arquitectónico de trazabilidad temporal: consumir la validación al registrar, sin añadir auditoría permanente ni conservar obligatoriamente una asociación histórica entre frase y validación. La limpieza manual puede eliminar dicha evidencia sin afectar la frase definitiva; se acepta expresamente la excepción al brief sobre metadata y decisión humana permanentes por frase.
@@ -139,7 +141,7 @@ Como cliente del backend, quiero que el registro respete las reglas de entrada d
 
 Esta sección documenta el comportamiento externo con las decisiones HITL aprobadas. Los ajustes respecto al contrato compartido se detallan en Compatibilidad; no se prescribe estructura de código.
 
-**Entrada**: `POST /api/v1/phrases`, JSON. Se rechazan propiedades desconocidas y parámetros de consulta ajenos al contrato. `text` y `validationId` son obligatorios; `confirmed` es opcional. Texto de 1–280 puntos de código del original, no vacío tras trim y sin controles `Cc`; no se exigen letras ni se limita el volumen global de solicitudes.
+**Entrada**: `POST /api/v1/phrases`, JSON. Se rechazan propiedades desconocidas en el body (`forbidNonWhitelisted`). Los parámetros de consulta no se declaran en el controlador y se ignoran (p. ej. `?extra=1` no altera el resultado). `text` y `validationId` son obligatorios; `confirmed` es opcional. Texto de 1–280 puntos de código del original, no vacío tras trim y sin controles `Cc`; no se exigen letras ni se limita el volumen global de solicitudes.
 
 ```json
 {
@@ -156,20 +158,21 @@ Esta sección documenta el comportamiento externo con las decisiones HITL aproba
   "data": {
     "id": "123e4567-e89b-42d3-a456-426614174000",
     "text": "Me gusta viajar a Cusco",
-    "createdAt": "2026-10-22T19:02:00Z"
+    "createdAt": "2026-10-22T19:02:00.000Z"
   }
 }
 ```
 
 | Estado / código | Condición |
 | --- | --- |
-| 400 / `VALIDATION_ERROR` | Texto/confirmación inválidos o campos/query ajenos al contrato; detalles por campo cuando corresponda. Incluye texto mayor de 280 puntos de código, vacío tras trim o con controles `Cc`. |
+| 400 / `VALIDATION_ERROR` | Texto/confirmación inválidos o campos ajenos al contrato en el body (`detail`: «Los datos enviados no son válidos.»); detalles por campo cuando corresponda. Incluye texto mayor de 280 puntos de código, vacío tras trim o con controles `Cc`. |
 | 400 / `INVALID_VALIDATION_ID` | Referencia ausente, UUID malformado o referencia UUID v4 bien formada pero inexistente; no se infiere su estado anterior. |
 | 400 / `PHRASE_MISMATCH` | Original recibido distinto del asociado a la validación. |
 | 409 / `VALIDATION_EXPIRED` | Validación pendiente que alcanzó su expiración. |
 | 409 / `VALIDATION_ALREADY_USED` | Validación consumida al leer el comprobante. |
 | 409 / `CONFIRMATION_REQUIRED` | Alerta almacenada sin `confirmed=true`. |
-| 500 / `INTERNAL_ERROR` | Fallo inesperado o validación de modelo/versión incompatible, con mensaje público seguro. |
+| 409 / `INCOMPATIBLE_MODEL` | Modelo o versión de la validación distintos de los configurados (`detail`: «La validación no es compatible con el modelo actual.»). |
+| 500 / `INTERNAL_ERROR` | Fallo inesperado, con mensaje público seguro. |
 | 500 / `DATABASE_ERROR` | Fallo de conexión, consulta o escritura al recuperar o registrar. |
 
 F003 no realiza inferencia ni incorpora `AI_UNAVAILABLE` como error propio del registro.
@@ -190,7 +193,7 @@ F003 no realiza inferencia ni incorpora `AI_UNAVAILABLE` como error propio del r
 - **SC-004**: Las pruebas verifican el orden y la espera de ambas escrituras. Se documenta que solicitudes concurrentes pueden crear varias frases.
 - **SC-005**: Los fallos de inserción no intentan consumir; los de consumo conservan la frase y propagan el error.
 - **SC-006**: El 100 % de los registros de aceptación conserva el contenido validado y reutiliza su representación semántica previa sin repetir la evaluación de similitud.
-- **SC-007**: En todos los escenarios de respuesta, el cliente distingue creación, entrada inválida, confirmación pendiente, expiración, consumo previo y fallo técnico mediante el resultado público, sin datos internos expuestos. La referencia inexistente y la incompatibilidad se distinguen mediante el catálogo aprobado.
+- **SC-007**: En todos los escenarios de respuesta, el cliente distingue creación, entrada inválida, confirmación pendiente, expiración, consumo previo, incompatibilidad de modelo y fallo técnico mediante el resultado público, sin datos internos expuestos. La referencia inexistente y la incompatibilidad se distinguen mediante el catálogo vigente.
 - **SC-008**: Todos los escenarios de cancelación sin solicitud de registro crean cero frases y cero registros adicionales de cancelación.
 
 - **SC-009**: Todos los casos de aceptación de longitud, espacios externos, controles, signos y emojis cumplen las mismas reglas de admisibilidad de F002; el volumen por sí solo no produce rechazos 429.
@@ -230,11 +233,11 @@ Rutas relativas a la raíz del repositorio; no se modifican estas fuentes en el 
 
 - **Q1-A — Evidencia**: El usuario aprobó mantener el alcance arquitectónico sin auditoría permanente. Se acepta expresamente la excepción al brief FR-012, BR-014, AC-006 y AC-015 sobre metadata completa y decisión humana vinculadas permanentemente a cada frase. El consumo temporal refleja el uso de la validación, sin añadir historial ni asociación permanente.
 - **Q2-A — Continuidad contractual**: El usuario aprobó alinear F003 con F002 y pidió «lo más simple posible»: 1–280 puntos de código del original, trim no vacío, sin controles Cc, sin exigir letras y sin límite global/429. Se conservan lectura histórica de F001 y reglas existentes, sin introducir mecanismos adicionales.
-- **Q3-A — Rechazos**: Tras consultar la alternativa más sencilla sin reingeniería, el usuario confirmó reutilizar 400/`INVALID_VALIDATION_ID` para referencia inexistente y 500/`INTERNAL_ERROR` para modelo/versión incompatible. Se rechaza sin consumir ni guardar, sin inferir estados anteriores ni añadir códigos.
+- **Q3-A — Rechazos**: Tras consultar la alternativa más sencilla sin reingeniería, el usuario confirmó reutilizar 400/`INVALID_VALIDATION_ID` para referencia inexistente y 500/`INTERNAL_ERROR` para modelo/versión incompatible. Nota (implementación): el código final añadió `INCOMPATIBLE_MODEL` y responde 409 para la incompatibilidad; sigue sin consumir ni guardar, sin inferir estados anteriores.
 
 ### Compatibilidad
 
-Estas decisiones precisan F003 antes de implementar. Frente a `CreatePhraseRequest` en el OpenAPI consultado, el texto de nuevas creaciones pasa de 500 a 280 puntos de código y se retira 429 por volumen de esta operación. La lectura histórica de hasta 500 puntos de código de F001 no cambia. Se mantienen ruta, campos, booleano opcional, envoltorio de éxito y demás errores; Q3 reutiliza códigos existentes.
+Estas decisiones precisan F003 antes de implementar. Frente a `CreatePhraseRequest` en el OpenAPI consultado, el texto de nuevas creaciones pasa de 500 a 280 puntos de código y se retira 429 por volumen de esta operación. La lectura histórica de hasta 500 puntos de código de F001 no cambia. Se mantienen ruta, campos, booleano opcional, envoltorio de éxito y demás errores; Q3 reutilizó códigos existentes; la incompatibilidad quedó finalmente como 409/`INCOMPATIBLE_MODEL`.
 
 El contrato compartido y las secciones afectadas del bloque 06 deberán reflejar estos ajustes antes de implementar F003. Esta invocación actualiza la especificación y su checklist; no modifica fuentes externas al backend ni implementa código. Q1 documenta la excepción al brief sin rediseñar la persistencia.
 

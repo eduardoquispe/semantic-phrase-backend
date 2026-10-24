@@ -39,7 +39,7 @@ Valor finito en [-1, 1]; no porcentaje ni probabilidad. Comparación sin redonde
 | match                | Unión textual/vectorial/nula                         | `matched_phrase_id UUID NULL`, `similarity_score DOUBLE PRECISION NULL` |
 | requiresConfirmation | boolean coherente con resultado                      | `requires_confirmation BOOLEAN NOT NULL`                                |
 | createdAt            | Fecha válida, precisión de segundos                  | `created_at TIMESTAMPTZ NOT NULL`                                       |
-| expiresAt            | createdAt + TTL, estrictamente posterior             | `expires_at TIMESTAMPTZ NOT NULL`                                       |
+| expiresAt            | createdAt + TTL (la entidad no valida el orden)      | `expires_at TIMESTAMPTZ NOT NULL`                                       |
 | consumedAt           | null al crear; consumo fuera de F002                 | `consumed_at TIMESTAMPTZ NULL`                                          |
 
 Copiar defensivamente fechas, vectores y estructuras mutables al construir y exponer datos. No agregar clase base de agregado, VO por cada campo, `status`, `match_type`, JSON libre ni persistencia histórica nueva.
@@ -76,7 +76,7 @@ La frase coincidente y su texto en la respuesta provienen de la proyección de b
 2. Vigente si `now < expiresAt`; expirada si `now >= expiresAt`. Método puro `isExpired(now)` sin dependencia de reloj de infraestructura.
 3. F002 no consume ni renueva. Validar otra vez genera otro UUID y no invalida ni prorroga la anterior.
 4. Cancelar/abandonar no realiza escritura adicional. La fila puede permanecer después de expirar.
-5. Consumo atómico e inserción en `phrases` se dejan para la funcionalidad de registro. No crear ahora su puerto ni adaptador.
+5. Consumo e inserción en `phrases` se dejan para la funcionalidad de registro (F003, dos escrituras secuenciales sin transacción).
 6. Limpieza manual; sin scheduler, worker ni borrado oportunista durante solicitudes.
 
 ## Persistencia y migración
@@ -101,14 +101,14 @@ No se implementa registro ni consulta de validaciones en F002.
 | Variable                        | Política / ejemplo seguro                                                                                              |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`, `PORT`          | Conservar configuración existente                                                                                      |
-| `AI_EMBEDDINGS_URL`             | Obligatoria HTTP(S), sin credenciales/query/fragmento; host `http://127.0.0.1:8080`, red Docker `http://embeddings:80` |
+| `AI_EMBEDDINGS_URL`             | Sin validación de formato; host `http://127.0.0.1:8080`, red Docker `http://embeddings:80` |
 | `AI_MODEL`                      | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, perfil fijo                                             |
-| `AI_EMBEDDING_VERSION`          | Obligatoria, `tei-<sha256>` del descriptor contrastado manualmente por el operador                                     |
-| `AI_EMBEDDING_DIMENSIONS`       | `384`, rechazar otra dimensión                                                                                         |
-| `AI_SIMILARITY_THRESHOLD`       | Finito [-1,1], default `0.8538613695045911`                                                                            |
-| `AI_INFERENCE_TIMEOUT_MS`       | Entero positivo obligatorio, sin default; `5000` es ejemplo operativo                                                  |
-| `PHRASE_VALIDATION_TTL_MINUTES` | Entero positivo, default `15`                                                                                          |
+| `AI_EMBEDDING_VERSION`          | `tei-<sha256>` del descriptor contrastado manualmente por el operador (`getOrThrow` en el registro; sin validar formato) |
+| `AI_EMBEDDING_DIMENSIONS`       | `384`; otra dimensión aborta el arranque                                                                               |
+| `AI_SIMILARITY_THRESHOLD`       | Default `0.8538613695045911` (sin validar rango)                                                                       |
+| `AI_INFERENCE_TIMEOUT_MS`       | Sin default ni validación (ausente → `NaN`); `5000` es ejemplo operativo                                               |
+| `PHRASE_VALIDATION_TTL_MINUTES` | Default `15` (sin validar)                                                                                             |
 
 Retirar `AI_MODEL_CACHE_DIR`, su variante usada actualmente `AI_EMBEDDING_CACHE_DIR` y cualquier opción exclusiva del runtime local. Revisión, pooling mean y dtype float32 se contrastan manualmente con `/info`; el endpoint compatible normaliza y el despliegue fija auto-truncate=false. Configuración efectiva sin prompts predeterminados; dimensión y norma se comprueban en integración. El descriptor pertenece al contrato del servicio, sin manifiesto de archivos de pesos ni preparación desde NestJS.
 
-Configurar mediante `ConfigService` antes de escuchar, sin lectura de ENV en dominio/casos de uso ni nueva biblioteca. URL inválida o error de la inferencia inicial impiden inicialización exitosa. El perfil remoto se contrasta manualmente, sin guardas automáticas del adaptador. No añadir ENV de throttle, caché, fallback o selección de modelos alternativos.
+Nota (implementación): no existe un módulo de configuración tipada; `ConfigurationPort` expone `get`/`getOrThrow` y las comprobaciones son puntuales. Configurar mediante `ConfigurationPort` antes de escuchar, sin lectura de ENV en dominio/casos de uso ni nueva biblioteca. Una dimensión distinta de 384 o un error de la inferencia inicial impiden inicialización exitosa. El perfil remoto se contrasta manualmente, sin guardas automáticas del adaptador. No añadir ENV de throttle, caché, fallback o selección de modelos alternativos.

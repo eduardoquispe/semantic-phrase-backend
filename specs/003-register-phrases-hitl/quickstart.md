@@ -58,12 +58,13 @@ Usar validaciones independientes para cada éxito. En cada rechazo comprobar que
 | confirmed cadena, número o null | 400 VALIDATION_ERROR; sin coerción |
 | validationId ausente, no UUID, UUID no v4 o v4 inexistente | 400 INVALID_VALIDATION_ID |
 | Texto distinto solo en mayúsculas o espacios | 400 PHRASE_MISMATCH |
-| requiresConfirmation u otra propiedad extra, validationToken o query extra | 400 VALIDATION_ERROR cuando no haya otra causa aislada |
+| requiresConfirmation u otra propiedad extra o validationToken en el body | 400 VALIDATION_ERROR cuando no haya otra causa aislada |
+| Query extra (`?extra=1`) | Ignorada; el resultado no cambia |
 | Texto ausente/no cadena, vacío tras trim o con tab/LF/CR/u otro Cc | 400 VALIDATION_ERROR |
 | 280 puntos de código originales, signos o emojis sin letras | Permite registro con comprobante aplicable; espacios cuentan y se conservan |
 | 281 puntos de código | 400 VALIDATION_ERROR |
 | now == expiresAt o now > expiresAt en validación pendiente | 409 VALIDATION_EXPIRED |
-| Modelo o versión conservada incompatibles | 500 INTERNAL_ERROR seguro |
+| Modelo o versión conservada incompatibles | 409 INCOMPATIBLE_MODEL |
 | Fallo de BD / error inesperado ajeno a BD | 500 DATABASE_ERROR / 500 INTERNAL_ERROR |
 | Más de 60 solicitudes/minuto con entradas controladas | Sin 429 por volumen; cada una sigue sus condiciones funcionales |
 | Validar y abandonar sin POST de registro | Cero frases nuevas; sin estado de cancelación |
@@ -89,7 +90,8 @@ No se requieren migraciones, dependencias nuevas ni comprobación manual de gara
 
 - `pnpm run build`: PASS.
 - ESLint, Prettier y `git diff --check`: PASS.
-- `pnpm test --runInBand`: PASS, 25 suites y 295 pruebas.
-- `pnpm run test:e2e --runInBand`: PASS, 4 suites y 109 pruebas.
+- `pnpm test`: PASS, 28 suites y 318 pruebas (revisión 2026-10-24).
+- `pnpm run test:e2e`: PASS, 4 suites y 115 pruebas (revisión 2026-10-24).
+- `npx tsc --noEmit -p tsconfig.json`: PASS.
 
 Jest encontró EPERM al abrir conexiones locales dentro del sandbox; ambas suites pasaron fuera del sandbox con permiso. No se ejecutaron pruebas contra PostgreSQL real para esta revisión.

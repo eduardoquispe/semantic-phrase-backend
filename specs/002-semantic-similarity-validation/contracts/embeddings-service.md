@@ -9,21 +9,21 @@ El contrato público de validación conserva ruta, campos y estados.
 
 ## Configuración
 
-`AI_EMBEDDINGS_URL`: URL HTTP(S) absoluta sin credenciales, query ni fragmento.
+`AI_EMBEDDINGS_URL`: URL HTTP(S) del servicio TEI (no se valida el formato).
 Host: `http://127.0.0.1:8080`; red Docker: `http://embeddings:80`.
-Conservar pathname base. El adaptador configura `baseURL = new URL('v1', baseUrl).href`.
-`AI_INFERENCE_TIMEOUT_MS`: entero positivo obligatorio, sin default; 5000 es ejemplo.
-La configuración también valida modelo/revisión/dimensión, versión, umbral, TTL y secreto.
+El adaptador configura `baseURL = "<url sin barras finales>/v1"`, de modo que un pathname base se conserva (`http://tei/base` → `http://tei/base/v1`).
+`AI_INFERENCE_TIMEOUT_MS`: sin default ni validación (si falta, `Number(undefined)` da `NaN`); 5000 es ejemplo.
+El arranque solo comprueba `AI_EMBEDDING_DIMENSIONS=384` y la inferencia inicial; modelo, versión, umbral y TTL no se validan (no hay secreto de firma).
 
 Una sola instancia de `OpenAIEmbeddings` por adaptador:
 
 ```ts
 new OpenAIEmbeddings({
   model: config.model,
-  apiKey: 'tei-local',
+  apiKey: '',
   maxRetries: 0,
   timeout: config.timeoutMs,
-  configuration: { baseURL: new URL('v1', config.baseUrl).href },
+  configuration: { baseURL: `${url.replace(/\/+$/, '')}/v1` },
 });
 ```
 

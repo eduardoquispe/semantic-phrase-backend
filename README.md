@@ -4,17 +4,19 @@ NestJS API for the shared phrase list, semantic validation and confirmed registr
 
 ## Local setup
 
-Use Node.js 22 and pnpm. From the repository root, start PostgreSQL with `docker compose up -d postgres`. From `apps/backend`:
+Use Node.js 22 and pnpm. From the repository root, start PostgreSQL and the embeddings service with `docker compose up -d postgres embeddings` (or `docker compose up -d --wait`). The backend refuses to start if the embeddings service does not answer its startup probe. The Compose image is `cpu-arm64` (`platform: linux/arm64`). From `apps/backend`:
 
 ```sh
 pnpm install
 cp .env.example .env
 ```
 
-Set `DATABASE_URL` to the local PostgreSQL URL. `.env.example` matches the repository Compose credentials. The application loads `.env` automatically through the root `ConfigModule`; existing shell variables take precedence. Drizzle CLI keeps its separate configuration and requires `DATABASE_URL` to be exported or supplied by an environment loader. `PORT` defaults to `3000`.
+Set `DATABASE_URL` to the local PostgreSQL URL. `.env.example` matches the repository Compose credentials. The application loads `.env` automatically through the root `ConfigModule`; existing shell variables take precedence. Drizzle CLI keeps its separate configuration (`drizzle.config.ts` throws without `DATABASE_URL`); `drizzle-kit` picks up `DATABASE_URL` from `.env` in this directory, or from the shell. `PORT` defaults to `3000`. Environment variables read by the backend: `DATABASE_URL`, `PORT`, `AI_EMBEDDINGS_URL`, `AI_MODEL`, `AI_EMBEDDING_VERSION`, `AI_EMBEDDING_DIMENSIONS`, `AI_INFERENCE_TIMEOUT_MS`, `AI_SIMILARITY_THRESHOLD` (default `0.8538613695045911`) and `PHRASE_VALIDATION_TTL_MINUTES` (default `15`). Configuration is not validated against a schema; only `DATABASE_URL`, `AI_EMBEDDING_DIMENSIONS` (must be `384`), `AI_MODEL` and `AI_EMBEDDING_VERSION` are checked.
+
+Global setup lives in `src/configure-app.ts`: prefix `api`, strict `ValidationPipe`, a fixed CORS origin (`http://localhost:5173`) and the global Problem Details filter. Any other `HttpException` (for example 404 on an unknown route) is returned as its status with code `HTTP_ERROR`.
 
 ```sh
-DATABASE_URL=postgresql://semantic:semantic@localhost:5432/semantic_phrase pnpm run db:migrate
+pnpm run db:migrate
 pnpm run start:dev
 ```
 
@@ -22,7 +24,7 @@ Migrations run only when requested. `pnpm run db:generate` generates a new Drizz
 
 ## API
 
-`GET /api/v1/phrases?page=1&limit=20` returns `data` with `id`, `text`, and `createdAt`, plus `meta` with `page`, `limit`, `total`, and `totalPages`. `page` starts at 1, `limit` ranges from 1 to 100, and only decimal digits are accepted. Invalid query input returns 400; database operation failures return 500 / `DATABASE_ERROR`; unexpected failures return 500. Errors use `application/problem+json`. The list only includes active phrases.
+`GET /api/v1/phrases?page=1&limit=20` returns `data` with `id`, `text`, and `createdAt`, plus `meta` with `page`, `limit`, `total`, and `totalPages`. `page` starts at 1, `limit` ranges from 1 to 100, and values are converted with `Number()` and must be integers (so `1e1`, `1.0` and `0x10` are also accepted; arrays and non-numeric strings are rejected). Invalid query input returns 400; database operation failures return 500 / `DATABASE_ERROR`; unexpected failures return 500. Errors use `application/problem+json`. The list only includes active phrases.
 
 `DELETE /api/v1/phrases/{id}` soft-deletes a phrase (`status = 2`, `deleted_at` set; the row is kept). Returns 204 without body; 400 / `VALIDATION_ERROR` if `id` is not a UUID; 404 / `PHRASE_NOT_FOUND` if it does not exist or was already deleted; 500 / `DATABASE_ERROR` on database failure. Deleted phrases are ignored by `GET /api/v1/phrases` and `POST /api/v1/phrase-validations`; earlier validations that cite them are unchanged. Requires `pnpm run db:migrate` (migration `0002`). See [F004 quickstart](specs/004-soft-delete-phrases/quickstart.md).
 
@@ -40,7 +42,7 @@ See [F001 quickstart](specs/001-list-phrases/quickstart.md) for manual acceptanc
 
 `POST /api/v1/phrase-validations` recibe exclusivamente `{ "text": "Me gusta viajar a Cusco" }`.
 Admite 1–280 puntos de código Unicode del original, sin controles Cc ni texto vacío
-tras trim. Rechaza campos y query desconocidos. Validar conserva el original y
+tras trim. Rechaza campos desconocidos en el body; los parámetros de query no declarados se ignoran. Validar conserva el original y
 un embedding en `phrase_validations`; no registra frases.
 
 La inferencia usa **OpenAIEmbeddings de LangChain** contra el servicio TEI local,
@@ -71,11 +73,11 @@ informada por TEI no es una certificación criptográfica de todos los pesos.
 Los vectores Xenova anteriores conservan su identidad y quedan excluidos del coseno;
 un corpus solo incompatible sin igualdad textual produce 500. No hay backfill automático.
 
-`AI_INFERENCE_TIMEOUT_MS` es obligatorio y entero positivo; 5000 es solo ejemplo.
-El timeout se delega al SDK; no hay fetch ni deadline propio. No hay reintentos ni fallback. Umbral inicial:
-0.8538613695045911; TTL inicial: 15 minutos.
+`AI_INFERENCE_TIMEOUT_MS` se pasa tal cual al SDK (5000 en el ejemplo); no se valida: si falta, el valor resultante es `NaN`.
+El timeout se delega al SDK; no hay fetch ni deadline propio. No hay reintentos ni fallback. Umbral (`AI_SIMILARITY_THRESHOLD`):
+0.8538613695045911 por defecto; TTL (`PHRASE_VALIDATION_TTL_MINUTES`): 15 minutos por defecto.
 
-El arranque realiza una inferencia de comprobación antes de escuchar. La identidad
+El arranque realiza una inferencia de comprobación antes de escuchar y exige `AI_EMBEDDING_DIMENSIONS=384`; si el servicio no responde, el proceso termina con `AiUnavailableError`. La identidad
 del servicio se contrasta manualmente; el backend conserva la versión configurada.
 Aplicar migraciones existentes explícitamente con `pnpm run db:migrate`; no se
 aplican durante bootstrap ni se añade una migración por TEI.
@@ -86,8 +88,8 @@ Coincidencia textual: `match={type:"textual_exact",phrase:{id,text},similaritySc
 confirmación obligatoria. Coincidencia vectorial: `type:"vector"` y score coseno
 entre -1 y 1; la candidata también se devuelve bajo el umbral. El umbral es inclusivo.
 Errores Problem Details: 400 `VALIDATION_ERROR` con `errors[].messages[]`,
-503 `AI_UNAVAILABLE`, 500 `DATABASE_ERROR` y 500 `INTERNAL_ERROR` para incompatibilidad,
-SQL inesperado. No se aplica throttle en validación.
+503 `AI_UNAVAILABLE`, 500 `DATABASE_ERROR` y 500 `INTERNAL_ERROR` para un corpus activo sin ningún vector compatible
+y sin igualdad textual, o fallos inesperados. No se aplica throttle en validación.
 
 Una validación expira cuando `now >= expiresAt`. Fila y respuesta comparten
 la misma fecha; el UUID no autentica personas. Revalidar crea otra identidad sin
@@ -134,8 +136,8 @@ se rechazan. Cancelar significa no enviar este POST y no crea ninguna frase.
 ```
 
 El registro admite el mismo texto de 1–280 puntos de código de F002, incluidos
-signos, emojis y espacios externos; no admite controles Cc, campos adicionales
-ni query. La lectura histórica de hasta 500 puntos de código se conserva.
+signos, emojis y espacios externos; no admite controles Cc ni campos adicionales en el body; los parámetros de query
+no declarados se ignoran. La lectura histórica de hasta 500 puntos de código se conserva.
 No hay límite global por volumen. No se generan nuevos embeddings ni se busca
 otra coincidencia: se copian el original, normalizado, vector y modelo guardados.
 
@@ -143,13 +145,14 @@ Errores `application/problem+json`:
 
 | Estado | Código | Causa |
 | --- | --- | --- |
-| 400 | `VALIDATION_ERROR` | Texto, booleano, body o query inválidos; `errors[].messages[]` por campo |
+| 400 | `VALIDATION_ERROR` | Texto, booleano o body inválidos; `errors[].messages[]` por campo |
 | 400 | `INVALID_VALIDATION_ID` | Referencia ausente, no UUID v4 o inexistente |
 | 400 | `PHRASE_MISMATCH` | Original diferente, aunque sea equivalente tras normalizar |
+| 409 | `INCOMPATIBLE_MODEL` | El modelo o versión de la validación difiere de `AI_MODEL`/`AI_EMBEDDING_VERSION` |
 | 409 | `CONFIRMATION_REQUIRED` | Alerta almacenada sin true; permite reintentar con true |
 | 409 | `VALIDATION_EXPIRED` | Se alcanzó la expiración; requiere volver a validar |
 | 409 | `VALIDATION_ALREADY_USED` | Consumo previo observado al leer el comprobante |
-| 500 | `INTERNAL_ERROR` | Modelo/versión incompatible o fallo inesperado, sin detalles internos |
+| 500 | `INTERNAL_ERROR` | Fallo inesperado, sin detalles internos |
 | 500 | `DATABASE_ERROR` | Fallo de conexión, consulta o escritura en persistencia |
 
 Primero se inserta la frase y después se actualiza consumedAt del comprobante.
@@ -163,5 +166,7 @@ No se requieren dependencias, tablas, migraciones ni variables nuevas.
 
 El alcance y la evidencia de verificación están en
 [F003 quickstart](specs/003-register-phrases-hitl/quickstart.md).
+
+El repositorio registra (nivel LOG) el texto normalizado, las coincidencias y los primeros componentes del embedding.
 
 Los fallos de conexión, SQL y restricciones se traducen globalmente a 500 / `DATABASE_ERROR` con `detail: "Ocurrió un error de base de datos."`. El backend conserva la causa y la registra con el stack una sola vez; no se incluyen detalles internos en Problem Details. Esto sustituye 503 / `DATABASE_UNAVAILABLE` y requiere ajustar clientes que dependían de ese estado o código. Los errores del servicio de IA conservan 503 / `AI_UNAVAILABLE`.

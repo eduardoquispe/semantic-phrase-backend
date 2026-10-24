@@ -83,7 +83,7 @@ Como cliente del backend, quiero respuestas claras cuando la frase no existe, ya
 
 ### Key Entities
 
-- **Frase**: texto validado con identidad, fecha de creación y, nueva, fecha de eliminación opcional. Activa si no tiene fecha de eliminación; eliminada en caso contrario.
+- **Frase**: texto validado con identidad, fecha de creación y, nueva, fecha de eliminación opcional. Activa si `status = 1`; eliminada si `status = 2` (con `deleted_at` informado por `softDelete`). El filtro de todas las consultas es `status`, no la nulidad de `deleted_at`.
 - **Validación temporal**: sin cambios; puede citar una frase que luego se elimina.
 
 ## Success Criteria *(mandatory)*

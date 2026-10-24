@@ -2,18 +2,21 @@
 
 ## Project Structure & Module Organization
 
-This directory is the NestJS 11 backend. It currently contains the starter `GET /` route: `src/main.ts` starts the server, `src/app.module.ts` composes dependencies, and `src/app.controller.ts` delegates to `src/app.service.ts`.
+This directory is the NestJS 11 backend. `src/main.ts` starts the server (`PORT`, default `3000`) and `src/configure-app.ts` centralizes the global setup: `api` prefix, `ValidationPipe` (`transform`, `whitelist`, `forbidNonWhitelisted`), CORS for `http://localhost:5173` and the global `ProblemDetailsFilter`. `src/app.module.ts` composes `ConfigurationModule`, `DatabaseModule` and `PhrasesModule`.
 
-Place new capabilities under `src/modules/<capability>/` and compose them in `app.module.ts`. Follow `.agents/skills/backend-architecture/SKILL.md` for layer and file placement; consult `.specify/memory/constitution.md` for project principles.
+The only capability is `src/modules/phrases/`, split into `domain/`, `application/` and `infrastructure/` (`embeddings/`, `http/`, `persistence/drizzle/`). Cross-cutting code lives in `src/shared/` (configuration port, database provider, Problem Details). Place new capabilities under `src/modules/<capability>/` and compose them in `app.module.ts`. Follow `.agents/skills/backend-architecture/SKILL.md` for layer and file placement; consult `.specify/memory/constitution.md` for project principles.
 
-Unit tests sit beside source files as `*.spec.ts`; HTTP end-to-end tests live in `test/` as `*.e2e-spec.ts`. Build output goes to `dist/`, and coverage reports go to `coverage/`; neither belongs in commits.
+HTTP API (prefix `/api/v1`): `GET /phrases`, `POST /phrases`, `DELETE /phrases/:id` (soft delete) and `POST /phrase-validations`. Errors use RFC 9457-style Problem Details (`application/problem+json`). The API contract is in `README.md`, `specs/` and `../../docs/03-architecture/openapi.yaml`.
+
+Unit tests sit beside source files as `*.spec.ts`; HTTP end-to-end tests live in `test/` as `*.e2e-spec.ts` (ports are mocked, so they need neither Postgres nor the embeddings service). Build output goes to `dist/`, and coverage reports go to `coverage/`; neither belongs in commits.
 
 ## Build, Test, and Development Commands
 
 Use pnpm, as indicated by `pnpm-lock.yaml`.
 
 - `pnpm install` installs dependencies.
-- `pnpm run start:dev` starts the server with file watching; it listens on `PORT` or defaults to `3000`.
+- `pnpm run start:dev` starts the server with file watching. It needs Postgres (with pgvector) and the TEI `embeddings` service: `docker compose up -d --wait` from the repository root. Boot fails if `DATABASE_URL` is missing, if `AI_EMBEDDING_DIMENSIONS` is not `384`, or if the embeddings service does not answer the startup probe.
+- `pnpm run db:generate` creates a Drizzle migration from `*.model.ts` changes; `pnpm run db:migrate` applies migrations (`DATABASE_URL` comes from `.env` or the shell).
 - `pnpm run build` compiles the application into `dist/`.
 - `pnpm run start:prod` runs the compiled application after a build.
 - `pnpm run lint` checks and fixes TypeScript lint issues; review its edits before committing.
@@ -34,8 +37,14 @@ Use a short, imperative commit subject that describes the change. In pull reques
 
 ## Feature Specifications
 
-Spec Kit files live in `.specify/`, with related skills in `.agents/skills/`. For specification-driven work, use the relevant skill and keep the feature's spec, plan, and tasks aligned with `.specify/memory/constitution.md`. Define inputs, outputs, and error behavior for API routes, and document compatibility changes before implementation.
+Spec Kit files live in `.specify/`, with related skills in `.agents/skills/`. Feature specs are in `specs/001-list-phrases`, `002-semantic-similarity-validation`, `003-register-phrases-hitl` and `004-soft-delete-phrases`. For specification-driven work, use the relevant skill and keep the feature's spec, plan, and tasks aligned with `.specify/memory/constitution.md`. Define inputs, outputs, and error behavior for API routes, and document compatibility changes before implementation. When code and a spec disagree, update the spec to match the implemented behavior.
 
 ## Configuration & Secrets
 
-Keep credentials out of commits. Local `.env` files are ignored by Git. Document any new required environment variable and provide a safe example value; the current server only reads `PORT`.
+Keep credentials out of commits. Local `.env` files are ignored by Git; copy `.env.example` and adjust. Document any new required environment variable and provide a safe example value. Variables read today:
+
+- `DATABASE_URL` (required), `PORT` (default `3000`).
+- `AI_EMBEDDINGS_URL`, `AI_MODEL`, `AI_EMBEDDING_VERSION`, `AI_EMBEDDING_DIMENSIONS` (must be `384`), `AI_INFERENCE_TIMEOUT_MS`.
+- `AI_SIMILARITY_THRESHOLD` (default `0.8538613695045911`) and `PHRASE_VALIDATION_TTL_MINUTES` (default `15`).
+
+There is no schema validation of the configuration: only `DATABASE_URL`, the dimensions, `AI_MODEL` and `AI_EMBEDDING_VERSION` are checked.

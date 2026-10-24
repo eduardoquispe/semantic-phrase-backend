@@ -1,7 +1,10 @@
 # Quickstart de validación — F002
 
 Implementación vigente: OpenAIEmbeddings directo contra TEI 1.9.4, con el adaptador
-mínimo indicado por el usuario. El registro histórico local se conserva separado.
+mínimo indicado por el usuario (`infrastructure/embeddings/huggin-face/`). El registro histórico local
+y el de JWT se conservan separados y no describen el comportamiento actual.
+
+Nota (implementación, 2026-10-24): `pnpm test` pasa con 28 suites y 318 pruebas, y `pnpm run test:e2e` con 4 suites y 115 pruebas (puertos simulados). Las cifras de las secciones fechadas más abajo son históricas. El 400 de validación usa `detail` «Los parámetros de la solicitud no son válidos.»; los parámetros de query no declarados se ignoran.
 Véanse [plan](plan.md) y [contrato TEI](contracts/embeddings-service.md).
 
 ## Preparación
@@ -57,7 +60,7 @@ pnpm run test:e2e --runInBand
 Unitarias del adaptador verifican opciones, inferencia inicial, VOs y traducción.
 HTTP usa configureApp, puertos dobles y un montaje del SDK real con respuestas TEI
 simuladas base64; errores red/429/500/JSON/shape/vector/timeout no continúan a
-búsqueda/save. Mantener regresión F001 con datos históricos hasta 500 puntos.
+búsqueda/save. Los textos de BD usan el mismo `PhraseText` (sin excepción de lectura).
 Las suites con dobles no demuestran disponibilidad ni SQL real.
 
 ## Escenarios reales
@@ -70,7 +73,7 @@ curl -i http://localhost:3000/api/v1/phrase-validations \
 201 con data.validationId/expiresAt/requiresConfirmation/match. Empty: match null;
 textual: score null y confirmación; vector: una candidata incluso bajo umbral.
 No imprimir tokens en evidencia. 400 para entrada inválida; 503 para SDK; 500 DATABASE_ERROR para fallos de BD;
-500 para incompatible/SQL inesperado. Ninguna solicitud registra phrases.
+500 INTERNAL_ERROR para corpus incompatible sin igualdad textual o fallo inesperado. Ninguna solicitud registra phrases.
 
 Para integración, usar base temporal aislada, aplicar migraciones existentes y
 preparar fixtures TEI deliberados. Contrastar Top-1/desempates/filtro exacto con SQL,
@@ -96,6 +99,8 @@ No se repitieron las mediciones ni las pruebas SQL reales de la evidencia histó
 Se corrigió además la composición de la URL TEI para admitir una barra final sin duplicarla.
 
 ## Evidencia histórica anterior a la retirada de JWT
+
+> Histórico: las menciones de firma, `jose` y JWT de esta sección y de la tabla «Trazabilidad actual» describen la implementación previa; el código actual no firma nada ni usa `jose`.
 
 Estos resultados describen la implementación previa; no acreditan el contrato UUID actual.
 
@@ -154,9 +159,9 @@ PASS reales:
 - Dos frases con modelo/versión TEI activos y vectores iguales: empate vectorial
   por UUID ASC y score exactamente igual a SQL. Otra versión con vector perfecto
   queda excluida. Las consultas siguen siendo secuenciales sin snapshot común.
-- Lectura F001 de un texto histórico de 500 puntos de código.
-- Cada 201 conserva original, vector(384), modelo/versión configurados, consumed_at
-  null y JWT HS256/typ JWT/purpose mínimo verificado criptográficamente. Fechas
+- Lectura F001 de un texto de 280 puntos de código con la regla única.
+- Cada 201 conservaba original, vector(384), modelo/versión configurados, consumed_at
+  null y (en esa implementación previa, ya retirada) un JWT HS256/typ JWT/purpose mínimo verificado criptográficamente. Fechas
   de fila, iat/exp y respuesta coinciden a segundos. Revalidar no consume/renueva.
 - Conteo de phrases intacto en cada solicitud. Al final del corpus de pruebas:
   3 frases preparadas deliberadamente y 6 validaciones temporales, todas eliminadas
@@ -212,7 +217,7 @@ este entorno y muestra pequeña; no es una garantía sobre otros equipos/corpus.
 | Requisitos / criterios         | Evidencia TEI vigente                                                                       |
 | ------------------------------ | ------------------------------------------------------------------------------------------- |
 | FR-001, FR-015; SC-001, SC-008 | POST sin autenticación, 201 y shape exacto en HTTP; textual real sin alta                   |
-| FR-002–003; SC-007             | DTO/VO y matriz HTTP Unicode/Cc/extras/280–281; F001 histórico hasta 500                    |
+| FR-002–003; SC-007             | DTO/VO y matriz HTTP Unicode/Cc/emojis/3 letras/extras/280–281                             |
 | FR-004–010; SC-001–003, SC-008 | Repositorio/use-case/HTTP; SQL real textual, empate vectorial, filtro y empty/incompatible  |
 | FR-011–013; SC-004             | Errores de puertos y SDK, timeout SDK, DB selectiva, firma fallida y Problem Details seguro |
 | FR-014, FR-017; SC-006         | Mapper explícito, JWT real HS256/typ/purpose y claims mínimos sin texto/vector/modelo       |
@@ -255,7 +260,7 @@ No hay argumentos ni variables de prompt predeterminado en el contenedor.
 
 Perfil observado:
 
-- Imagen declarada: `ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9`.
+- Imagen declarada entonces: `…:cpu-arm64-1.9` (el `compose.yaml` actual fija `cpu-arm64-1.9.4`).
 - Imagen efectiva: `sha256:798cd7615e060a72ccbdf19aa0ada52289c6a0147490195bafaece6ce04d70f1`.
 - `/info.version`: `1.9.4`; `/info.sha`: `e80ef225ed0e6cb1717ce632a6a84b6cf211bb67`.
 - `/info.model_id`: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
@@ -351,7 +356,7 @@ explícitamente mediante SQL de pruebas. No se atribuyen mejoras de calidad sem�
 | Requisitos / criterios         | Evidencia                                                                                                       |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | FR-001, FR-015                 | HTTP sin autenticación, shape exacto, mapper/controller; casos 201 y tests de errores                           |
-| FR-002–003; SC-007             | PhraseText.forValidation, validador y matriz HTTP Unicode/Cc/extras; regresión F001 281–500                     |
+| FR-002–003; SC-007             | PhraseText, validador y matriz HTTP Unicode/Cc/emojis/3 letras/extras                |
 | FR-004–010; SC-001–003, SC-008 | Pruebas de repositorio/caso de uso/HTTP; SQL real de prioridad, empate, vacío e incompatible                    |
 | FR-011–013; SC-004             | Corte de efectos, timeout/salida/rechazo tardíos, errores selectivos DB, firma fallida y Problem Details seguro |
 | FR-014, FR-017; SC-006         | Firma JWT real HS256/typ/purpose y claims mínimos; mapper con campos públicos explícitos                        |
@@ -373,6 +378,6 @@ composición se ejercitan en E2E, fuera del reporte unitario. Sin umbral configu
 
 Comprobación de contratos con parser YAML: 35 referencias internas del compartido
 y 12 del local resueltas. Ambas operaciones de validación declaran exactamente
-201/400/500/503. Límites 280 para validar y 500 para el esquema histórico/registro,
+201/400/500/503. Límite único de 280 para validar, registrar y leer,
 referencias separadas y FieldError.messages[] comprobados. `git diff --check`: PASS.
 No existe `.specify/extensions.yml`; no hay hooks before/after_implement que ejecutar.

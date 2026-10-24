@@ -22,7 +22,7 @@ Añadir `DELETE /api/v1/phrases/{id}` (204/400/404/500) que marca `phrases.statu
 
 **Project Type**: web-service (backend de `apps/backend`)
 
-**Performance Goals**: Sin nuevos objetivos; filtro `IS NULL` no degrada Top-1 exacto a escala MVP
+**Performance Goals**: Sin nuevos objetivos; el filtro `status = 1` no degrada Top-1 exacto a escala MVP
 
 **Constraints**: Contrato de errores `application/problem+json` vigente; sin `DELETE` físico; datos existentes quedan activos (`status` = `1` (activa) por defecto)
 
