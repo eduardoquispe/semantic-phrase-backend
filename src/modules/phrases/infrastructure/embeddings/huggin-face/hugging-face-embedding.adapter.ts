@@ -4,6 +4,7 @@ import {
   EmbeddingGeneratorPort,
   GeneratedEmbedding,
 } from '../../../application/ports/outbound/embedding-generator.port';
+import { EMBEDDING_DIMENSIONS } from '../../../domain/constants/embedding.constants';
 import { Embedding } from '../../../domain/value-objects/embedding.value-object';
 import { PhraseModel } from '../../../domain/value-objects/phrase-model.value-object';
 import { ConfigurationPort } from '../../../../../shared/application/ports/outbound/configuration.port';
@@ -28,6 +29,14 @@ export class HuggingFaceEmbeddingAdapter
   }
 
   async onModuleInit(): Promise<void> {
+    const dimensions = Number(
+      this.config.getOrThrow<string | number>('AI_EMBEDDING_DIMENSIONS'),
+    );
+    if (dimensions !== EMBEDDING_DIMENSIONS) {
+      throw new Error(
+        `AI_EMBEDDING_DIMENSIONS must be ${EMBEDDING_DIMENSIONS}`,
+      );
+    }
     try {
       await this.generate('Comprobación de inicio.');
     } catch {

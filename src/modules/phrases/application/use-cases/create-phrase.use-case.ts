@@ -19,7 +19,7 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
   private readonly expectedModel: PhraseModel;
 
   constructor(
-    private readonly validations: PhraseValidationRepositoryPort,
+    private readonly phraseValidationsRepository: PhraseValidationRepositoryPort,
     private readonly phrases: PhraseRepositoryPort,
     private readonly config: ConfigurationPort,
   ) {
@@ -30,13 +30,15 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
   }
   async execute(input: CreatePhraseInput) {
     const text = PhraseText.forValidation(input.text).value;
-    const validation = await this.validations.findById(input.validationId);
+    const phraseValidation = await this.phraseValidationsRepository.findById(
+      input.validationId,
+    );
 
-    if (!validation) throw new PhraseValidationNotFoundError();
+    if (!phraseValidation) throw new PhraseValidationNotFoundError();
 
     const now = new Date();
 
-    validation.verifyUsable({
+    phraseValidation.verifyUsable({
       text,
       model: this.expectedModel,
       confirmed: !!input.confirmed,
@@ -45,15 +47,15 @@ export class CreatePhraseUseCase implements CreatePhrasePort {
 
     const phrase = Phrase.create({
       id: new PhraseId(randomUUID()),
-      text: validation.text,
-      normalizedText: new NormalizedPhraseText(validation.normalizedText),
-      embedding: validation.embedding,
-      model: validation.model,
+      text: phraseValidation.text,
+      normalizedText: new NormalizedPhraseText(phraseValidation.normalizedText),
+      embedding: phraseValidation.embedding,
+      model: phraseValidation.model,
       now,
     });
 
     await this.phrases.save(phrase);
-    await this.validations.update(validation.id, {
+    await this.phraseValidationsRepository.update(phraseValidation.id, {
       consumedAt: now,
     });
     return phrase;

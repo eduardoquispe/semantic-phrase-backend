@@ -10,7 +10,6 @@ export const teiInfo = {
 export const teiConfig = {
   AI_EMBEDDINGS_URL: 'http://tei/base/',
   AI_MODEL: teiInfo.model_id,
-  AI_MODEL_REVISION: teiInfo.model_sha,
   AI_EMBEDDING_DIMENSIONS: '384',
   AI_EMBEDDING_VERSION:
     'tei-9674a558292f4607f88dc959067a9762554c3faecfc481af3c0bf66914f764b3',

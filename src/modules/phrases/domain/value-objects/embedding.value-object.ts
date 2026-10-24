@@ -1,13 +1,13 @@
+import { EMBEDDING_DIMENSIONS } from '../constants/embedding.constants';
 import { InvalidEmbeddingError } from '../errors/invalid-embedding.error';
 
 export class Embedding {
-  static readonly DIMENSIONS = 384;
   readonly values: readonly number[];
 
   constructor(values: number[]) {
-    if (!Array.isArray(values) || values.length !== Embedding.DIMENSIONS) {
+    if (!Array.isArray(values) || values.length !== EMBEDDING_DIMENSIONS) {
       throw new InvalidEmbeddingError(
-        'Embedding must contain exactly 384 components.',
+        `Embedding must contain exactly ${EMBEDDING_DIMENSIONS} components.`,
       );
     }
     const copy = Array.from<number>(values);
