@@ -66,7 +66,8 @@ describe('ValidatePhraseUseCase', () => {
     expect(saved.normalizedText).toBe('hola cusco');
     expect(saved.requiresConfirmation).toBe(true);
     expect(saved.consumedAt).toBeNull();
-    expect(saved.match).toBe(result.match);
+    expect(saved.matchedPhraseId).toBe(phrase.id);
+    expect(saved.similarityScore).toBeNull();
     expect(result.validationId).toBe(saved.id);
     expect(repository.list).not.toHaveBeenCalled();
   });
@@ -84,7 +85,8 @@ describe('ValidatePhraseUseCase', () => {
       expect(saved.requiresConfirmation).toBe(score >= settings.threshold);
       expect(saved.normalizedText).toBe('hola');
       expect(saved.consumedAt).toBeNull();
-      expect(saved.match).toBe(result.match);
+      expect(saved.matchedPhraseId).toBe(phrase.id);
+      expect(saved.similarityScore?.value).toBe(score);
       expect(result.match?.phrase).toEqual(phrase);
       expect(result.match?.similarityScore?.value).toBe(score);
     },
@@ -98,7 +100,8 @@ describe('ValidatePhraseUseCase', () => {
     expect(v.normalizedText).toBe('hola');
     expect(v.requiresConfirmation).toBe(false);
     expect(v.consumedAt).toBeNull();
-    expect(v.match).toBeNull();
+    expect(v.matchedPhraseId).toBeNull();
+    expect(v.similarityScore).toBeNull();
     expect(v.embedding.values).toEqual(generated.embedding.values);
     expect(v.model).toEqual(generated.model);
     expect(validations.save).toHaveBeenCalledTimes(1);

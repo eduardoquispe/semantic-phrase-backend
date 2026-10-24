@@ -384,7 +384,7 @@ Commits cortos, en imperativo y atómicos, con prefijos convencionales (`feat:`,
 
 ## Limitaciones conocidas
 
-- Registro y consumo de la validación son dos escrituras secuenciales **sin transacción**: si falla el consumo, la frase queda insertada; solicitudes concurrentes con el mismo `validationId` pueden crear varias frases.
+- Registro y consumo de la validación ocurren en **una sola transacción** (`PhraseRegistrationPort`): si algo falla, no se guarda la frase ni se consume la validación. El consumo es condicional (`consumed_at IS NULL`), así que solicitudes concurrentes con el mismo `validationId` producen una frase y un 409 `VALIDATION_ALREADY_USED`.
 - Las validaciones expiradas o abandonadas no se limpian automáticamente.
 - No hay autenticación, rate limiting ni límite global de frases; el `validationId` no autentica personas.
 - El umbral no se ha revalidado con TEI float32 (ver arriba).

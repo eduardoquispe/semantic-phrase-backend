@@ -18,12 +18,13 @@ describe('CreatePhraseUseCase', () => {
   const model = new PhraseModel('MiniLM', 'v1');
   const props = {
     id: new PhraseId('550e8400-e29b-41d4-a716-446655440000'),
-    text: PhraseText.forValidation(' Hola '),
+    text: new PhraseText(' Hola '),
     normalizedText: new NormalizedPhraseText('stored-normalized-text'),
     model,
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     requiresConfirmation: false,
-    match: null,
+    matchedPhraseId: null,
+    similarityScore: null,
     consumedAt: null,
     createdAt: new Date('2026-10-22'),
     expiresAt: new Date('2099-01-01'),
@@ -32,17 +33,11 @@ describe('CreatePhraseUseCase', () => {
   const validations = {
     findById: jest.fn(),
     save: jest.fn(),
-    update: jest.fn(),
   };
-  const phrases = {
-    list: jest.fn(),
-    findValidationMatch: jest.fn(),
-    save: jest.fn(),
-    softDelete: jest.fn(),
-  };
+  const registration = { register: jest.fn() };
   const useCase = new CreatePhraseUseCase(
     validations,
-    phrases,
+    registration,
     new ConfigurationStub({
       AI_MODEL: model.id,
       AI_EMBEDDING_VERSION: model.version,
@@ -60,7 +55,7 @@ describe('CreatePhraseUseCase', () => {
         () =>
           new CreatePhraseUseCase(
             validations,
-            phrases,
+            registration,
             new ConfigurationStub(values),
           ),
       ).toThrow(`Configuration key "${key}" does not exist`);
@@ -86,25 +81,16 @@ describe('CreatePhraseUseCase', () => {
       expect(phrase.model).toBe(stored.model);
       expect(phrase.createdAt.getTime()).toBeGreaterThanOrEqual(before);
       expect(phrase.createdAt.getTime()).toBeLessThanOrEqual(Date.now());
-      expect(phrases.save).toHaveBeenCalledWith(phrase);
+      expect(registration.register).toHaveBeenCalledTimes(1);
+      expect(registration.register).toHaveBeenCalledWith(phrase, stored.id);
       expect(validations.findById).toHaveBeenCalledWith(stored.id);
-      expect(validations.update).toHaveBeenCalledWith(stored.id, {
-        consumedAt: expect.any(Date) as Date,
-      });
-      expect(phrases.findValidationMatch).not.toHaveBeenCalled();
     },
   );
-  it('awaits insertion before consumption and consumption before returning', async () => {
-    let inserted!: () => void;
-    let consumed!: () => void;
-    phrases.save.mockReturnValue(
+  it('awaits the atomic registration before returning', async () => {
+    let registered!: () => void;
+    registration.register.mockReturnValue(
       new Promise<void>((resolve) => {
-        inserted = resolve;
-      }),
-    );
-    validations.update.mockReturnValue(
-      new Promise<void>((resolve) => {
-        consumed = resolve;
+        registered = resolve;
       }),
     );
     let returned = false;
@@ -113,20 +99,17 @@ describe('CreatePhraseUseCase', () => {
       return phrase;
     });
     await Promise.resolve();
-    expect(phrases.save).toHaveBeenCalledTimes(1);
-    expect(validations.update).not.toHaveBeenCalled();
-    inserted();
     await Promise.resolve();
-    expect(validations.update).toHaveBeenCalledTimes(1);
+    expect(registration.register).toHaveBeenCalledTimes(1);
     expect(returned).toBe(false);
-    consumed();
+    registered();
     await pending;
     expect(returned).toBe(true);
   });
   it.each([
     [{ ...props, consumedAt: new Date() }, PhraseValidationAlreadyUsedError],
     [{ ...props, expiresAt: new Date(0) }, PhraseValidationExpiredError],
-    [{ ...props, text: PhraseText.forValidation('hola') }, PhraseMismatchError],
+    [{ ...props, text: new PhraseText('hola') }, PhraseMismatchError],
     [
       { ...props, model: new PhraseModel('other', 'v1') },
       IncompatibleValidationModelError,
@@ -149,8 +132,7 @@ describe('CreatePhraseUseCase', () => {
           errorClass,
         );
       }
-      expect(phrases.save).not.toHaveBeenCalled();
-      expect(validations.update).not.toHaveBeenCalled();
+      expect(registration.register).not.toHaveBeenCalled();
     },
   );
   it('rejects unknown validation before writes', async () => {
@@ -158,8 +140,7 @@ describe('CreatePhraseUseCase', () => {
     await expect(useCase.execute(input)).rejects.toBeInstanceOf(
       PhraseValidationNotFoundError,
     );
-    expect(phrases.save).not.toHaveBeenCalled();
-    expect(validations.update).not.toHaveBeenCalled();
+    expect(registration.register).not.toHaveBeenCalled();
   });
   it('allows explicit confirmation of a stored alert', async () => {
     validations.findById.mockResolvedValue(
@@ -180,8 +161,7 @@ describe('CreatePhraseUseCase', () => {
         await expect(useCase.execute({ ...input, confirmed })).rejects.toThrow(
           PhraseValidationExpiredError,
         );
-        expect(phrases.save).not.toHaveBeenCalled();
-        expect(validations.update).not.toHaveBeenCalled();
+        expect(registration.register).not.toHaveBeenCalled();
       } finally {
         jest.useRealTimers();
       }
@@ -190,33 +170,20 @@ describe('CreatePhraseUseCase', () => {
   it('validates direct input before reading persistence', async () => {
     await expect(useCase.execute({ ...input, text: 'a\nb' })).rejects.toThrow();
     expect(validations.findById).not.toHaveBeenCalled();
-    expect(phrases.save).not.toHaveBeenCalled();
-    expect(validations.update).not.toHaveBeenCalled();
+    expect(registration.register).not.toHaveBeenCalled();
   });
   it('propagates read failure without writes', async () => {
     const error = new Error('read failed');
     validations.findById.mockRejectedValueOnce(error);
     await expect(useCase.execute(input)).rejects.toBe(error);
-    expect(phrases.save).not.toHaveBeenCalled();
-    expect(validations.update).not.toHaveBeenCalled();
+    expect(registration.register).not.toHaveBeenCalled();
   });
-  it('does not consume when insertion fails', async () => {
-    const error = new Error('insert failed');
-    phrases.save.mockRejectedValueOnce(error);
+  it.each([
+    new Error('register failed'),
+    new PhraseValidationAlreadyUsedError(),
+  ])('propagates registration failure: %p', async (error) => {
+    registration.register.mockRejectedValueOnce(error);
     await expect(useCase.execute(input)).rejects.toBe(error);
-    expect(validations.update).not.toHaveBeenCalled();
-  });
-  it('propagates consumption failure after inserting without compensation', async () => {
-    const inserted: Phrase[] = [];
-    phrases.save.mockImplementation((phrase: Phrase) => {
-      inserted.push(phrase);
-      return Promise.resolve();
-    });
-    const error = new Error('consume failed');
-    validations.update.mockRejectedValueOnce(error);
-    await expect(useCase.execute(input)).rejects.toBe(error);
-    expect(inserted).toHaveLength(1);
-    expect(phrases.save).toHaveBeenCalledTimes(1);
-    expect(validations.update).toHaveBeenCalledTimes(1);
+    expect(registration.register).toHaveBeenCalledTimes(1);
   });
 });

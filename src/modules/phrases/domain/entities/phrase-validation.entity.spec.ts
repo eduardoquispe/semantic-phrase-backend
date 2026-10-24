@@ -1,13 +1,13 @@
 import { PhraseValidation } from './phrase-validation.entity';
 import type { PhraseValidationProps } from '../types/phrase-validation-props.interface';
 import type { CreatePhraseValidationProps } from '../types/create-phrase-validation-input.interface';
-import { PhraseValidationMatch } from '../value-objects/phrase-validation-match.value-object';
 import { PhraseId } from '../value-objects/phrase-id.value-object';
 import { PhraseText } from '../value-objects/phrase-text.value-object';
 import { PhraseModel } from '../value-objects/phrase-model.value-object';
 import { NormalizedPhraseText } from '../value-objects/normalized-phrase-text.value-object';
 import { SimilarityScore } from '../value-objects/similarity-score.value-object';
 import { Embedding } from '../value-objects/embedding.value-object';
+import type { ValidationMatch } from '../types/validation-match.type';
 import { ValidationMatchEnum } from '../enums/validation-match.enum';
 import { InvalidDateError } from '../../../../shared/domain/errors/invalid-date.error';
 import { InvalidPhraseValidationError } from '../errors/invalid-phrase-validation.error';
@@ -21,10 +21,11 @@ const id = '550e8400-e29b-41d4-a716-446655440000';
 function validationProps(): PhraseValidationProps {
   return {
     id: new PhraseId(id),
-    text: PhraseText.forValidation(' Hola '),
+    text: new PhraseText(' Hola '),
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     model: new PhraseModel('MiniLM', 'version'),
-    match: null,
+    matchedPhraseId: null,
+    similarityScore: null,
     normalizedText: new NormalizedPhraseText('hola'),
     requiresConfirmation: false,
     consumedAt: null,
@@ -66,13 +67,15 @@ describe('PhraseValidation', () => {
     ])(
       'decides confirmation from the match score (%s => %s)',
       (score, expected) => {
-        const match = new PhraseValidationMatch({
+        const match: ValidationMatch = {
           type: ValidationMatchEnum.Vector,
           phrase: { id, text: 'Hola' },
           similarityScore: new SimilarityScore(score),
-        });
+        };
         const v = PhraseValidation.create({ ...createInput(), match });
         expect(v.requiresConfirmation).toBe(expected);
+        expect(v.matchedPhraseId).toBe(id);
+        expect(v.similarityScore?.value).toBe(score);
       },
     );
 
@@ -114,8 +117,8 @@ describe('PhraseValidation', () => {
         expect(validation.consumedAt?.getTime() ?? null).toBe(consumed);
         expect(validation.normalizedText).toBe('stored-normalized-text');
         expect(validation.requiresConfirmation).toBe(true);
-        expect(validation.match).toBeNull();
-        expect(Object.isFrozen(validation)).toBe(true);
+        expect(validation.matchedPhraseId).toBeNull();
+        expect(validation.similarityScore).toBeNull();
       },
     );
 

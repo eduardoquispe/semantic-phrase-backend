@@ -1,3 +1,4 @@
+import type { ValidationMatch } from '../src/modules/phrases/domain/types/validation-match.type';
 import { PhraseRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-repository.port';
 import { PhraseValidationRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-validation-repository.port';
 import { Embedding } from '../src/modules/phrases/domain/value-objects/embedding.value-object';
@@ -69,7 +70,7 @@ describe.each([
               text: 'Candidate',
             },
             similarityScore: new SimilarityScore(0.5),
-          }),
+          } as ValidationMatch),
       })
       .overrideProvider(PhraseValidationRepositoryPort)
       .useValue(validations)

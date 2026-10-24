@@ -1,2 +1,2 @@
 export const MAX_PHRASE_TEXT_LENGTH = 280;
-export const MAX_STORED_PHRASE_TEXT_LENGTH = 500;
+export const MIN_PHRASE_TEXT_LETTERS = 3;

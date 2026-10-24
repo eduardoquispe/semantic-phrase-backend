@@ -13,19 +13,37 @@ describe('PhraseText', () => {
   );
 
   it('counts Unicode code points and preserves the original text', () => {
-    const value = '😀'.repeat(500);
+    const value = 'á'.repeat(280);
     expect(new PhraseText(value).value).toBe(value);
-    expect(() => new PhraseText('😀'.repeat(501))).toThrow(
+    expect(() => new PhraseText('á'.repeat(281))).toThrow(
       InvalidPhraseTextError,
     );
-    expect(new PhraseText('a').value).toBe('a');
-    expect(() => new PhraseText('a'.repeat(501))).toThrow(
-      InvalidPhraseTextError,
-    );
-    expect(() => new PhraseText(` ${'a'.repeat(499)} `)).toThrow(
+    expect(new PhraseText(' abc ').value).toBe(' abc ');
+    expect(() => new PhraseText(` ${'a'.repeat(280)} `)).toThrow(
       InvalidPhraseTextError,
     );
   });
+
+  it.each(['abc', '¿Cuándo es mi cita?', '¡ÁRBOL! 123', 'a-b, c.', 'ñ ñ ñ'])(
+    'accepts punctuation and at least 3 letters: %p',
+    (value) => {
+      expect(new PhraseText(value).value).toBe(value);
+    },
+  );
+
+  it.each(['!!!', '123', 'ab', 'a b 1', '... a ...'])(
+    'rejects fewer than 3 letters: %p',
+    (value) => {
+      expect(() => new PhraseText(value)).toThrow(InvalidPhraseTextError);
+    },
+  );
+
+  it.each(['Hola 😀', '😀😀😀 hola', 'hola ❤️', 'hola 👨‍👩‍👧', 'hola 🇵🇪'])(
+    'rejects emojis: %p',
+    (value) => {
+      expect(() => new PhraseText(value)).toThrow(InvalidPhraseTextError);
+    },
+  );
 
   const controls = [
     ...Array.from({ length: 32 }, (_, index) => index),
@@ -61,35 +79,5 @@ describe('PhraseText', () => {
       expect(error).toMatchObject({ name: 'InvalidPhraseTextError' });
       expect((error as Error).message).not.toContain(secret);
     }
-  });
-});
-
-describe('PhraseText.forValidation', () => {
-  it.each(['!!!', '😀'.repeat(280), ' a ', '¡ÁRBOL!  Cusco.'])(
-    'preserves admissible original',
-    (value) => {
-      expect(PhraseText.forValidation(value).value).toBe(value);
-    },
-  );
-  it.each([
-    '😀'.repeat(281),
-    ` ${'a'.repeat(279)} `,
-    '',
-    '  ',
-    'a\tb',
-    'a\nb',
-    'a\u0085b',
-    null,
-    42,
-  ])('rejects invalid validation text', (value) => {
-    expect(() => PhraseText.forValidation(value as string)).toThrow(
-      InvalidPhraseTextError,
-    );
-  });
-  it('preserves accents and punctuation in its normalized value', () => {
-    expect(PhraseText.forValidation(' ¡ÁRBOL!   EN Cusco. ').normalized).toBe(
-      '¡árbol! en cusco.',
-    );
-    expect(new PhraseText('😀'.repeat(500)).value).toHaveLength(1000);
   });
 });

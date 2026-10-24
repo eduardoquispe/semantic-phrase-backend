@@ -1,3 +1,4 @@
+import type { ValidationMatch } from '../src/modules/phrases/domain/types/validation-match.type';
 import { teiConfig, teiResponse } from './fixtures/tei';
 import { HuggingFaceEmbeddingAdapter } from '../src/modules/phrases/infrastructure/embeddings/huggin-face/hugging-face-embedding.adapter';
 import { IncompatiblePhraseCollectionError } from '../src/modules/phrases/application/errors/incompatible-phrase-collection.error';
@@ -146,7 +147,10 @@ describe('POST /api/v1/phrase-validations', () => {
     { text: {} },
     { text: '' },
     { text: '  ' },
-    { text: '😀'.repeat(281) },
+    { text: 'a'.repeat(281) },
+    { text: '!!!' },
+    { text: 'ab' },
+    { text: 'Hola 😀' },
     { text: ` ${'a'.repeat(279)} ` },
     { text: 'a\tb' },
     { text: 'a\nb' },
@@ -180,8 +184,8 @@ describe('POST /api/v1/phrase-validations', () => {
     await post({ text: 'Hola' }, '?extra=1').expect(201);
     expect(generator.generate).toHaveBeenCalledWith('Hola');
   });
-  it.each(['!!!', '😀'.repeat(280), ` ${'a'.repeat(278)} `])(
-    'accepts punctuation, astral and boundary originals',
+  it.each(['¿Cuándo es mi cita?', 'a'.repeat(280), ` ${'a'.repeat(278)} `])(
+    'accepts punctuation and boundary originals',
     async (text) => {
       await post({ text }).expect(201);
       expect(generator.generate).toHaveBeenCalledWith(text);
@@ -242,12 +246,12 @@ describe('POST /api/v1/phrase-validations', () => {
       repository.findValidationMatch.mockResolvedValue(
         type === 'empty'
           ? null
-          : {
+          : ({
               type,
               phrase,
               similarityScore:
                 type === 'vector' ? new SimilarityScore(0.9) : null,
-            },
+            } as ValidationMatch),
       );
       const response = await post().expect(201);
       const body = response.body as ValidationBody;

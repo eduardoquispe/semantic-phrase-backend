@@ -99,29 +99,6 @@ describe('GET /api/v1/phrases', () => {
     );
   }
 
-  it('lists historical texts of 281–500 code points', async () => {
-    seed(1);
-    const original = rows[0];
-    for (const size of [281, 500]) {
-      rows = [
-        Phrase.reconstitute({
-          id: new PhraseId(original.id),
-          text: new PhraseText('😀'.repeat(size)),
-          normalizedText: new NormalizedPhraseText('😀'.repeat(size)),
-          embedding: original.embedding,
-          model: original.model,
-          createdAt: original.createdAt,
-        }),
-      ];
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/phrases')
-        .expect(200);
-      expect((response.body as ListPhrasesResponseDto).data[0].text).toBe(
-        '😀'.repeat(size),
-      );
-    }
-  });
-
   it('does not expose the removed starter route', async () => {
     await request(app.getHttpServer()).get('/').expect(404);
   });

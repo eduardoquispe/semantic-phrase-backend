@@ -1,5 +1,4 @@
 import { ConfigurationPort } from '../../../../shared/application/ports/outbound/configuration.port';
-import { PhraseValidationMatch } from '../../domain/value-objects/phrase-validation-match.value-object';
 import { Injectable } from '@nestjs/common';
 import {
   DEFAULT_SIMILARITY_THRESHOLD,
@@ -41,18 +40,17 @@ export class ValidatePhraseUseCase implements ValidatePhrasePort {
   }
 
   async execute(input: ValidatePhraseInput): Promise<ValidatePhraseResult> {
-    const text = PhraseText.forValidation(input.text);
+    const text = new PhraseText(input.text);
 
     const embeddingGenerated = await this.generatorEmbedding.generate(
       text.value,
     );
-    const result = await this.phrasesRepository.findValidationMatch({
+    const match = await this.phrasesRepository.findValidationMatch({
       embedding: embeddingGenerated.embedding,
       model: embeddingGenerated.model,
       normalizedText: text.normalized,
     });
 
-    const match = result ? new PhraseValidationMatch(result) : null;
     const validation = PhraseValidation.create({
       id: new PhraseId(randomUUID()),
       text,
@@ -70,7 +68,7 @@ export class ValidatePhraseUseCase implements ValidatePhrasePort {
       validationId: validation.id,
       expiresAt: validation.expiresAt,
       requiresConfirmation: validation.requiresConfirmation,
-      match: validation.match,
+      match,
     };
   }
 }

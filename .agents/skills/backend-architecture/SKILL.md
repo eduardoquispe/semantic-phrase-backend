@@ -87,7 +87,7 @@ The domain imports no NestJS, HTTP DTOs, ORM models, SQL, or provider SDKs.
 Entities protect invariants; value objects hold validation and value semantics.
 `Phrase` uses `PhraseId`, `PhraseText`, `Embedding`, `NormalizedPhraseText`,
 `PhraseModel`, and `PhraseCreatedAt`; `PhraseValidation` also uses
-`PhraseValidationMatch` and `SimilarityScore`. Preserve encapsulation and defensive
+`SimilarityScore`. Preserve encapsulation and defensive
 copying when changing construction or mapping. Add value objects for concrete
 rules, not merely to wrap every primitive.
 
@@ -222,8 +222,10 @@ verification. For API changes, run `pnpm run build`, `pnpm test`, and
 updates need skill/documentation validation rather than application tests.
 
 The `phrases` capability implements listing, semantic validation, confirmed
-registration and soft deletion. Registration writes the phrase and then marks
-the validation consumed in two sequential writes; there is no transaction port.
+registration and soft deletion. Registration goes through `PhraseRegistrationPort`:
+`DrizzlePhraseRegistrationRepository` inserts the phrase and conditionally marks
+the validation consumed in a single transaction (rollback + `VALIDATION_ALREADY_USED`
+when it was already consumed).
 Consult the feature specifications in `specs/` when requested; this skill does
 not authorize scaffolding new behavior. Before finishing a change,
 check capability ownership, import direction, DI bindings, and whether each

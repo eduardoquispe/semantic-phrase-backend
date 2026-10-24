@@ -15,7 +15,6 @@ describe('ListPhrasesUseCase', () => {
   const useCase = new ListPhrasesUseCase({
     list,
     findValidationMatch: jest.fn(),
-    save: jest.fn(),
     softDelete: jest.fn(),
   });
 

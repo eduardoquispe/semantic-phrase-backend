@@ -12,15 +12,17 @@ import { configureApp } from '../src/configure-app';
 import { teiConfig } from './fixtures/tei';
 import { EmbeddingGeneratorPort } from '../src/modules/phrases/application/ports/outbound/embedding-generator.port';
 import { PhraseRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-repository.port';
+import { PhraseRegistrationPort } from '../src/modules/phrases/application/ports/outbound/phrase-registration.port';
+import { PhraseValidationAlreadyUsedError } from '../src/modules/phrases/domain/errors/validation-already-used.error';
 import { PhraseValidationRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-validation-repository.port';
 import { PhraseValidation } from '../src/modules/phrases/domain/entities/phrase-validation.entity';
 import { Phrase } from '../src/modules/phrases/domain/entities/phrase.entity';
 import type { PhraseValidationProps } from '../src/modules/phrases/domain/types/phrase-validation-props.interface';
 import { Embedding } from '../src/modules/phrases/domain/value-objects/embedding.value-object';
-import { NormalizedPhraseText } from '../src/modules/phrases/domain/value-objects/normalized-phrase-text.value-object';
 import { PhraseModel } from '../src/modules/phrases/domain/value-objects/phrase-model.value-object';
 import { SimilarityScore } from '../src/modules/phrases/domain/value-objects/similarity-score.value-object';
 import { DatabaseError } from '../src/shared/infrastructure/database/errors/database.error';
+import { NormalizedPhraseText } from '../src/modules/phrases/domain/value-objects/normalized-phrase-text.value-object';
 
 interface ValidationBody {
   data: { validationId: string };
@@ -43,7 +45,11 @@ function rebuild(
     text: previous.text,
     embedding: previous.embedding,
     model: previous.model,
-    match: previous.match,
+    matchedPhraseId:
+      previous.matchedPhraseId === null
+        ? null
+        : new PhraseId(previous.matchedPhraseId),
+    similarityScore: previous.similarityScore,
     normalizedText: new NormalizedPhraseText(previous.normalizedText),
     requiresConfirmation: previous.requiresConfirmation,
     consumedAt: previous.consumedAt,
@@ -66,14 +72,13 @@ describe('phrase registration HTTP flow', () => {
   const repository = {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
-    save: jest.fn(),
     softDelete: jest.fn(),
   };
   const validations = {
     save: jest.fn(),
-    update: jest.fn(),
     findById: jest.fn(),
   };
+  const registration = { register: jest.fn() };
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigurationPort)
@@ -90,6 +95,8 @@ describe('phrase registration HTTP flow', () => {
       .useValue(repository)
       .overrideProvider(PhraseValidationRepositoryPort)
       .useValue(validations)
+      .overrideProvider(PhraseRegistrationPort)
+      .useValue(registration)
       .compile();
     app = module.createNestApplication();
     configureApp(app);
@@ -111,19 +118,21 @@ describe('phrase registration HTTP flow', () => {
       stored.set(v.id, v);
       return Promise.resolve();
     });
-    validations.update.mockImplementation(
-      (id: string, changes: Partial<PhraseValidationProps>) => {
-        stored.set(id, rebuild(stored.get(id)!, changes));
-        return Promise.resolve();
-      },
-    );
     validations.findById.mockImplementation((id: string) =>
       Promise.resolve(stored.get(id) ?? null),
     );
-    repository.save.mockImplementation((phrase: Phrase) => {
-      phrases.push(phrase);
-      return Promise.resolve();
-    });
+    registration.register.mockImplementation(
+      (phrase: Phrase, validationId: string) => {
+        if (stored.get(validationId)?.consumedAt)
+          return Promise.reject(new PhraseValidationAlreadyUsedError());
+        stored.set(
+          validationId,
+          rebuild(stored.get(validationId)!, { consumedAt: phrase.createdAt }),
+        );
+        phrases.push(phrase);
+        return Promise.resolve();
+      },
+    );
   });
   const post = (body: object, query = '') =>
     request(app.getHttpServer())
@@ -230,12 +239,7 @@ describe('phrase registration HTTP flow', () => {
     expect(phrases).toHaveLength(0);
   });
   it.each([
-    [
-      'text',
-      { text: PhraseText.forValidation('hola') },
-      400,
-      'PHRASE_MISMATCH',
-    ],
+    ['text', { text: new PhraseText('hola') }, 400, 'PHRASE_MISMATCH'],
     ['expired', { expiresAt: new Date(0) }, 409, 'VALIDATION_EXPIRED'],
     ['consumed', { consumedAt: new Date(0) }, 409, 'VALIDATION_ALREADY_USED'],
     [
@@ -266,7 +270,7 @@ describe('phrase registration HTTP flow', () => {
       );
       expect(stored.get(validationId)).toEqual(state);
       expect(phrases).toHaveLength(0);
-      expect(repository.save).not.toHaveBeenCalled();
+      expect(registration.register).not.toHaveBeenCalled();
     },
   );
   it.each([
@@ -280,7 +284,10 @@ describe('phrase registration HTTP flow', () => {
     { text: 42 },
     { text: '' },
     { text: '  ' },
-    { text: '😀'.repeat(281) },
+    { text: 'a'.repeat(281) },
+    { text: '!!!' },
+    { text: 'ab' },
+    { text: 'Hola 😀' },
     { text: ` ${'a'.repeat(279)} ` },
     { text: 'a\tb' },
     { text: 'a\nb' },
@@ -301,7 +308,7 @@ describe('phrase registration HTTP flow', () => {
     await post({ text: ' Hola ', validationId }, '?extra=1').expect(201);
     expect(stored.get(validationId)?.consumedAt).not.toBeNull();
   });
-  it.each(['!!!', '😀'.repeat(280), ` ${'a'.repeat(278)} `])(
+  it.each(['¿Cuándo es mi cita?', 'a'.repeat(280), ` ${'a'.repeat(278)} `])(
     'preserves admissible originals',
     async (text) => {
       const validationId = await validate(text);
@@ -316,17 +323,17 @@ describe('phrase registration HTTP flow', () => {
       'DATABASE_ERROR',
     ],
     [
-      'insert',
+      'register',
       new DatabaseError(new Error('secret SQL credentials')),
       'DATABASE_ERROR',
     ],
-    ['insert', new Error('secret SQL credentials'), 'INTERNAL_ERROR'],
+    ['register', new Error('secret SQL credentials'), 'INTERNAL_ERROR'],
   ] as const)(
     'handles technical failure safely during %s',
     async (stage, error, code) => {
       const validationId = await validate();
       const operation =
-        stage === 'read' ? validations.findById : repository.save;
+        stage === 'read' ? validations.findById : registration.register;
       operation.mockRejectedValueOnce(error);
       expectProblem(
         await post({ text: ' Hola ', validationId }).expect(500),
@@ -337,20 +344,33 @@ describe('phrase registration HTTP flow', () => {
       expect(phrases).toHaveLength(0);
     },
   );
-  it('keeps the inserted phrase when updating consumption fails', async () => {
+  it('stores nothing and keeps the validation usable when registration fails', async () => {
     const validationId = await validate();
-    validations.update.mockRejectedValueOnce(
-      new DatabaseError(new Error('consumption failed')),
+    registration.register.mockRejectedValueOnce(
+      new DatabaseError(new Error('transaction rolled back')),
     );
     expectProblem(
       await post({ text: ' Hola ', validationId }).expect(500),
       500,
       'DATABASE_ERROR',
     );
-    expect(phrases).toHaveLength(1);
+    expect(phrases).toHaveLength(0);
     expect(stored.get(validationId)?.consumedAt).toBeNull();
     await post({ text: ' Hola ', validationId }).expect(201);
-    expect(phrases).toHaveLength(2);
+    expect(phrases).toHaveLength(1);
+    expect(stored.get(validationId)?.consumedAt).not.toBeNull();
+  });
+  it('rejects with 409 when a concurrent request consumes the validation first', async () => {
+    const validationId = await validate();
+    registration.register.mockRejectedValueOnce(
+      new PhraseValidationAlreadyUsedError(),
+    );
+    expectProblem(
+      await post({ text: ' Hola ', validationId }).expect(409),
+      409,
+      'VALIDATION_ALREADY_USED',
+    );
+    expect(phrases).toHaveLength(0);
   });
   it('rejects resend after success and permits independent duplicate validations', async () => {
     const validationId = await validate();

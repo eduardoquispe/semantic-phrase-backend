@@ -1,4 +1,3 @@
-import { PhraseValidationMatch } from '../../../domain/value-objects/phrase-validation-match.value-object';
 import { PhrasesMapper } from './phrases.mapper';
 import { SimilarityScore } from '../../../domain/value-objects/similarity-score.value-object';
 import { ValidationMatchEnum } from '../../../domain/enums/validation-match.enum';
@@ -12,7 +11,7 @@ describe('PhrasesMapper validation', () => {
         validationId: '550e8400-e29b-41d4-a716-446655440000',
         expiresAt: new Date(0),
         requiresConfirmation: score === null,
-        match: new PhraseValidationMatch(
+        match:
           score === null
             ? {
                 type: ValidationMatchEnum.TextualExact,
@@ -24,7 +23,6 @@ describe('PhrasesMapper validation', () => {
                 phrase,
                 similarityScore: new SimilarityScore(score),
               },
-        ),
       });
       expect(result).toEqual({
         data: {

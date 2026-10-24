@@ -4,20 +4,20 @@ Rutas de código relativas a `apps/backend/`. Esquema de referencia: `../../docs
 
 ## Entrada y reglas de texto
 
-`ValidatePhraseInput` contiene solo `text: string`. La nueva fábrica de dominio `PhraseText.forValidation` exige:
+`ValidatePhraseInput` contiene solo `text: string`. El constructor de dominio `PhraseText` exige:
 
-- De 1 a 280 puntos de código Unicode del original (`[...text].length`); espacios externos cuentan.
+- Hasta 280 puntos de código Unicode del original (`[...text].length`); espacios externos cuentan.
 - `trim()` no vacío; sin caracteres de categoría Unicode `Cc`, incluidos TAB, LF y CR.
-- Se admiten puntuación y emojis sin letras; no se detecta idioma.
+- Al menos 3 letras (`\p{L}`) y ningún emoji (`\p{Extended_Pictographic}`, indicadores regionales, ZWJ y selector de variación). Se admite puntuación; no se detecta idioma.
 - Conservación exacta del original; comparación con `trim().toLowerCase().replace(/\s+/g, ' ')`, misma regla existente de ECMAScript. No quitar acentos/puntuación ni aplicar NFC adicional.
 
-El constructor existente de `PhraseText` mantiene hasta 500 para reconstrucción de frases F001; la nueva fábrica restringe solo admisibilidad de F002. El DTO HTTP valida tipo y usa la misma regla. No usar un decorador de longitud UTF-16 ni `trim` transformador que cambie el payload.
+No existe excepción de lectura: el mismo constructor se usa al reconstruir frases desde BD. El DTO HTTP valida tipo y usa la misma regla. No usar un decorador de longitud UTF-16 ni `trim` transformador que cambie el payload.
 
 ## Entidades y objetos de valor
 
 ### Phrase existente
 
-Se reutilizan identidad UUID, texto original, texto normalizado, embedding, `PhraseModel` y fecha. No se cambia la tabla `phrases`, su constructor para datos históricos ni el contrato de listado. Nuevas consultas de coincidencia retornan proyecciones tipadas, sin cargar todos los embeddings ni reconstruir la entidad completa.
+Se reutilizan identidad UUID, texto original, texto normalizado, embedding, `PhraseModel` y fecha. No se cambia la tabla `phrases`, ni el contrato de listado. Nuevas consultas de coincidencia retornan proyecciones tipadas, sin cargar todos los embeddings ni reconstruir la entidad completa.
 
 ### Embedding y PhraseModel
 
@@ -36,7 +36,7 @@ Valor finito en [-1, 1]; no porcentaje ni probabilidad. Comparación sin redonde
 | normalizedText       | NormalizedPhraseText de la regla común               | `normalized_text TEXT NOT NULL`                                         |
 | embedding            | Embedding válido para modelo activo                  | `embedding VECTOR(384) NOT NULL`                                        |
 | model                | PhraseModel con identidad efectiva                   | `model_id VARCHAR(255) NOT NULL`, `model_version VARCHAR(150) NOT NULL` |
-| match                | Unión textual/vectorial/nula                         | `matched_phrase_id UUID NULL`, `similarity_score DOUBLE PRECISION NULL` |
+| matchedPhraseId / similarityScore | UUID o null / SimilarityScore o null (derivados del resultado de `findValidationMatch`, que no se almacena) | `matched_phrase_id UUID NULL`, `similarity_score DOUBLE PRECISION NULL` |
 | requiresConfirmation | boolean coherente con resultado                      | `requires_confirmation BOOLEAN NOT NULL`                                |
 | createdAt            | Fecha válida, precisión de segundos                  | `created_at TIMESTAMPTZ NOT NULL`                                       |
 | expiresAt            | createdAt + TTL (la entidad no valida el orden)      | `expires_at TIMESTAMPTZ NOT NULL`                                       |

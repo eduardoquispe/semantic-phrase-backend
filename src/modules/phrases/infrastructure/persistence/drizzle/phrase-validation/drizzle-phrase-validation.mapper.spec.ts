@@ -1,5 +1,4 @@
 import { teiConfig } from '../../../../../../../test/fixtures/tei';
-import { PhraseValidationMatch } from '../../../../domain/value-objects/phrase-validation-match.value-object';
 import { DrizzlePhraseValidationMapper } from './drizzle-phrase-validation.mapper';
 import { PhraseValidation } from '../../../../domain/entities/phrase-validation.entity';
 import type { PhraseValidationProps } from '../../../../domain/types/phrase-validation-props.interface';
@@ -13,10 +12,11 @@ const id = '550e8400-e29b-41d4-a716-446655440000';
 function validationProps(): PhraseValidationProps {
   return {
     id: new PhraseId(id),
-    text: PhraseText.forValidation(' Hola '),
+    text: new PhraseText(' Hola '),
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     model: new PhraseModel(teiConfig.AI_MODEL, teiConfig.AI_EMBEDDING_VERSION),
-    match: null,
+    matchedPhraseId: null,
+    similarityScore: null,
     normalizedText: new NormalizedPhraseText('hola'),
     requiresConfirmation: false,
     consumedAt: null,
@@ -26,46 +26,16 @@ function validationProps(): PhraseValidationProps {
 }
 
 import { SimilarityScore } from '../../../../domain/value-objects/similarity-score.value-object';
-import { ValidationMatchEnum } from '../../../../domain/enums/validation-match.enum';
 import { NormalizedPhraseText } from '../../../../domain/value-objects/normalized-phrase-text.value-object';
 describe('DrizzlePhraseValidationMapper', () => {
-  it('maps partial changes without clearing omitted fields or changing identity', () => {
-    const consumedAt = new Date();
-    expect(
-      DrizzlePhraseValidationMapper.toPartialPersistence({ id, consumedAt }),
-    ).toEqual({ consumedAt });
-    expect(
-      DrizzlePhraseValidationMapper.toPartialPersistence({
-        consumedAt: null,
-        match: null,
-        requiresConfirmation: false,
-      }),
-    ).toEqual({
-      consumedAt: null,
-      matchedPhraseId: null,
-      similarityScore: null,
-      requiresConfirmation: false,
-    });
-  });
-  it('maps all editable fields with their persistence representations', () => {
-    const validation = PhraseValidation.reconstitute(validationProps());
-    const { id: ignoredId, ...expected } =
-      DrizzlePhraseValidationMapper.toPersistence(validation);
-    expect(ignoredId).toBe(id);
-    expect(
-      DrizzlePhraseValidationMapper.toPartialPersistence(validation),
-    ).toEqual(expected);
-  });
   it.each([null, -0.7, 0.9])(
     'maps exact original, embedding, model and dates (%s)',
     (score) => {
       const props = validationProps();
-      if (score !== null)
-        props.match = new PhraseValidationMatch({
-          type: ValidationMatchEnum.Vector,
-          phrase: { id: props.id.value, text: 'Candidate' },
-          similarityScore: new SimilarityScore(score),
-        });
+      if (score !== null) {
+        props.matchedPhraseId = props.id;
+        props.similarityScore = new SimilarityScore(score);
+      }
       props.requiresConfirmation = score !== null && score >= 0.85;
       const v = PhraseValidation.reconstitute(props);
       const row = DrizzlePhraseValidationMapper.toPersistence(v);
@@ -105,7 +75,8 @@ describe('stored validation mapping', () => {
       consumedAt: null,
     });
     expect(result.requiresConfirmation).toBe(false);
-    expect(result.match).toBeNull();
+    expect(result.matchedPhraseId).toBe(id);
+    expect(result.similarityScore?.value).toBe(1);
     expect(result.consumedAt).toBeNull();
   });
   it('preserves stored alert, normalized text and consumed time without recomputing', () => {
@@ -120,7 +91,8 @@ describe('stored validation mapping', () => {
       normalizedText: 'preserved',
     } as Parameters<typeof DrizzlePhraseValidationMapper.toDomain>[0]);
     expect(result).toBeInstanceOf(PhraseValidation);
-    expect(result.match).toBeNull();
+    expect(result.matchedPhraseId).toBeNull();
+    expect(result.similarityScore).toBeNull();
     expect(result.createdAt).toEqual(row.createdAt);
     expect(result.requiresConfirmation).toBe(true);
     expect(result.normalizedText).toBe('preserved');

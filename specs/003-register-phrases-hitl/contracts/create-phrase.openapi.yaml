@@ -16,9 +16,9 @@ paths:
         Comprobar referencia UUID v4 existente, texto original exacto, modelo/versión
         compatibles (409 INCOMPATIBLE_MODEL si difieren), vigencia y consumo. Si requiresConfirmation almacenado es true,
         exigir confirmed=true. confirmed omitido equivale a false.
-        Sin transacción ni compensación ni registro único concurrente. Si falla
-        INSERT no se consume; si falla consumo, la frase permanece y se propaga el error.
-        Insertar frase y después actualizar consumedAt, reutilizando texto,
+        Transacción única: si falla cualquier escritura no se guarda ni se consume nada.
+        El consumo es condicional; una solicitud concurrente que llegue tarde recibe 409 VALIDATION_ALREADY_USED.
+        Actualizar consumedAt e insertar la frase, reutilizando texto,
         normalizado y vector almacenados; sin inferencia ni evaluación de similitud.
         Se permiten duplicados autorizados con distintas validaciones.
         now >= expiresAt implica expiración al leer. Un reenvío tras consumo recibe consumo
@@ -147,12 +147,12 @@ components:
       properties:
         text:
           type: string
-          minLength: 1
+          minLength: 3
           maxLength: 280
           description: |
             Puntos de código Unicode del original, incluidos espacios externos.
-            Debe ser no vacío tras trim y no contener controles Unicode Cc.
-            Signos y emojis admitidos. Conservar original idéntico al validado.
+            Debe ser no vacío tras trim, tener al menos 3 letras y no contener emojis ni controles Unicode Cc.
+            Puntuación admitida. Conservar original idéntico al validado.
         validationId:
           $ref: '#/components/schemas/UuidV4'
         confirmed:

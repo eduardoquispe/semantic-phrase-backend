@@ -7,13 +7,13 @@ Se reutilizan `Phrase`, sus objetos de valor y `DrizzlePhrasesModel`.
 | Campo | Tipo lógico | Procedencia/regla |
 | --- | --- | --- |
 | id | UUID v4 | Nuevo al registrar; independiente de validationId |
-| text | PhraseText | Original exacto de la validación, 1–280 puntos de código para nuevas creaciones |
+| text | PhraseText | Original exacto de la validación, hasta 280 puntos de código, al menos 3 letras, sin emojis |
 | normalizedText | string | Copia del normalizado almacenado por F002 |
 | embedding | Embedding, 384 componentes | Mismos valores almacenados, sin inferencia ni nueva normalización |
 | modelId / modelVersion | string | Copia de la validación, compatible con configuración activa |
 | createdAt | Date con zona al serializar | Fecha nueva del registro, no fecha de la validación |
 
-Respuesta HTTP solo id, text, createdAt. La lectura histórica conserva hasta 500 puntos de código. No existe unicidad textual ni asociación persistente con validationId.
+Respuesta HTTP solo id, text, createdAt. `PhraseText` aplica la misma regla al leer desde BD. No existe unicidad textual ni asociación persistente con validationId.
 
 ## Validación temporal (`phrase_validations`)
 
@@ -38,13 +38,12 @@ No hay FK a la frase definitiva. La limpieza manual de una validación no afecta
 
 - `findById(id: string): Promise<PhraseValidation | null>` mantiene la lectura del puerto temporal.
 - `save(validation: PhraseValidation): Promise<void>` realiza exclusivamente INSERT mediante el mapper existente.
-- `update(id: string, validation: Partial<PhraseValidation>): Promise<void>` actualiza los campos proporcionados mediante el mapper, sin modificar el id. F003 lo usa únicamente para consumedAt.
 - `CreatePhraseInput`: text, validationId y confirmed opcional. `CreatePhrasePort.execute` retorna `Phrase` como resultado de aplicación.
-- `PhraseRepositoryPort.save(phrase: Phrase): Promise<void>`: INSERT normal. El caso de uso construye Phrase y después de guardarla actualiza el consumo con el repositorio temporal.
+- `PhraseRegistrationPort.register(phrase: Phrase, validationId: string): Promise<void>`: en una transacción, UPDATE condicional de `consumed_at` (solo si es nulo) e INSERT de la frase. Si el UPDATE no afecta filas lanza `PhraseRegistrationError('VALIDATION_ALREADY_USED')` y revierte. El caso de uso construye Phrase y llama una sola vez al puerto.
 
 ## Reglas mínimas
 
-1. Texto real, 1–280 puntos de código del original, trim no vacío, sin Unicode Cc. Admitir signos/emojis y conservar espacios externos. Reutilizar `PhraseText.forValidation` y el validador HTTP F002.
+1. Texto real, hasta 280 puntos de código del original, trim no vacío, al menos 3 letras, sin emojis ni Unicode Cc. Admitir puntuación y conservar espacios externos. Reutilizar el constructor de `PhraseText` y el validador HTTP F002.
 2. validationId UUID v4 obligatorio; inexistente no autoriza ni permite inferir historia.
 3. confirmed ausente equivale a false; presente exige booleano real. true solo satisface la confirmación, no las otras reglas.
 4. Original idéntico mediante igualdad estricta. Normalizar el texto recibido no permite cambiarlo.
@@ -55,15 +54,15 @@ No hay FK a la frase definitiva. La limpieza manual de una validación no afecta
 
 | Estado derivado inicial | Evento | Resultado |
 | --- | --- | --- |
-| Pendiente vigente | Solicitud aplicable/autorizada | INSERT de frase seguido de UPDATE de consumedAt |
+| Pendiente vigente | Solicitud aplicable/autorizada | Transacción: UPDATE condicional de consumedAt + INSERT de frase |
 | Pendiente vigente con alerta | confirmed omitido/false | 409 CONFIRMATION_REQUIRED; conserva fila |
 | Pendiente vigente | Texto distinto | 400 PHRASE_MISMATCH; conserva fila |
 | Pendiente vigente | Modelo incompatible | 409 INCOMPATIBLE_MODEL; conserva fila |
 | Pendiente y now >= expiresAt | Registro | 409 VALIDATION_EXPIRED; conserva fila |
 | Consumida | Registro que lee consumo previo | 409 VALIDATION_ALREADY_USED; ninguna frase nueva |
 | Inexistente/eliminada | Registro | 400 INVALID_VALIDATION_ID |
-| Pendiente vigente | Fallo de INSERT | No se intenta consumir; error propagado |
-| Pendiente vigente | INSERT correcto y fallo de consumo | Frase conservada, error propagado; reintento puede duplicar |
+| Pendiente vigente | Fallo de UPDATE o INSERT | Rollback: no se guarda la frase ni se consume; error propagado; reintento seguro |
+| Pendiente vigente | Consumida por solicitud concurrente antes del UPDATE | Rollback; 409 VALIDATION_ALREADY_USED; ninguna frase nueva |
 | Pendiente | Abandono sin solicitud | Sin transición de F003; vence lógicamente según F002 |
 
-No hay transacción ni compensación ni garantía de registro único concurrente. Se usan UUID y fechas nuevos, con reloj de aplicación. No se vuelve a leer el comprobante durante las escrituras. No hay columna status, cancelación, renovación ni idempotencia garantizada.
+El registro es atómico (una transacción) y el consumo condicional garantiza una única frase por comprobante aun con concurrencia. Se usan UUID y fechas nuevos, con reloj de aplicación. No se vuelve a leer el comprobante durante las escrituras. No hay columna status, cancelación, renovación ni idempotencia garantizada.

@@ -58,15 +58,11 @@ describe('Phrase', () => {
     },
   );
 
-  it('protects its state and date against external mutation', () => {
+  it('protects its date against external mutation', () => {
     const input = props();
     const phrase = Phrase.reconstitute(input);
     input.createdAt.setTime(0);
     phrase.createdAt.setTime(1);
     expect(phrase.createdAt.toISOString()).toBe('2026-10-21T12:00:00.000Z');
-    expect(Object.isFrozen(phrase)).toBe(true);
-    expect(() => Object.assign(phrase, { normalizedText: 'changed' })).toThrow(
-      TypeError,
-    );
   });
 });

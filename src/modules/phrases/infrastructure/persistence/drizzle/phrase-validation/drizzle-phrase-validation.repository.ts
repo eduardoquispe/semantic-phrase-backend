@@ -35,17 +35,4 @@ export class DrizzlePhraseValidationRepository implements PhraseValidationReposi
       throw new DatabaseError(error);
     }
   }
-
-  async update(id: string, data: Partial<PhraseValidation>): Promise<void> {
-    const persistence =
-      DrizzlePhraseValidationMapper.toPartialPersistence(data);
-    try {
-      await this.database.client
-        .update(DrizzlePhraseValidationsModel)
-        .set(persistence)
-        .where(eq(DrizzlePhraseValidationsModel.id, id));
-    } catch (error) {
-      throw new DatabaseError(error);
-    }
-  }
 }

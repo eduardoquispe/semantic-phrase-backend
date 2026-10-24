@@ -25,7 +25,7 @@ describe('InvalidValidationTextFilter', () => {
         {
           field: 'text',
           messages: [
-            'El texto debe contener de 1 a 280 puntos de código Unicode, sin controles ni texto vacío.',
+            'El texto debe contener de 1 a 280 puntos de código Unicode, con al menos 3 letras, sin emojis, controles ni texto vacío.',
           ],
         },
       ],

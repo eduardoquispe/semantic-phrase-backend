@@ -1,6 +1,5 @@
 import { DrizzlePhraseValidationMapper } from './drizzle-phrase-validation.mapper';
 import type { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
 import { DrizzlePhraseValidationRepository } from './drizzle-phrase-validation.repository';
 import { DrizzlePhraseValidationsModel } from './drizzle-phrase-validations.model';
 import { DatabaseProvider } from '../../../../../../shared/infrastructure/database/database.provider';
@@ -14,10 +13,11 @@ const id = '550e8400-e29b-41d4-a716-446655440000';
 function validationProps(): PhraseValidationProps {
   return {
     id: new PhraseId(id),
-    text: PhraseText.forValidation(' Hola '),
+    text: new PhraseText(' Hola '),
     embedding: new Embedding(Array<number>(384).fill(0.25)),
     model: new PhraseModel('MiniLM', 'version'),
-    match: null,
+    matchedPhraseId: null,
+    similarityScore: null,
     normalizedText: new NormalizedPhraseText('hola'),
     requiresConfirmation: false,
     consumedAt: null,
@@ -57,6 +57,8 @@ describe('temporary validation repository', () => {
       embedding: JSON.stringify(v.embedding.values),
       modelId: v.model.id,
       modelVersion: v.model.version,
+      matchedPhraseId: null,
+      similarityScore: null,
       createdAt: v.createdAt,
       expiresAt: v.expiresAt,
       consumedAt: v.createdAt,
@@ -103,62 +105,6 @@ describe('temporary validation repository', () => {
     ).rejects.toBe(error);
     expect(insert).not.toHaveBeenCalled();
     save.mockRestore();
-    const updateMapper = jest
-      .spyOn(DrizzlePhraseValidationMapper, 'toPartialPersistence')
-      .mockImplementationOnce(() => {
-        throw error;
-      });
-    await expect(repository.update(id, {})).rejects.toBe(error);
-    expect(update).not.toHaveBeenCalled();
-    updateMapper.mockRestore();
-  });
-  it('updates only consumedAt for the requested id and awaits completion', async () => {
-    const consumedAt = new Date();
-    let finish!: () => void;
-    where.mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        finish = resolve;
-      }),
-    );
-    let saved = false;
-    const pending = repository.update(id, { consumedAt }).then(() => {
-      saved = true;
-    });
-    await Promise.resolve();
-    expect(saved).toBe(false);
-    expect(update).toHaveBeenCalledWith(DrizzlePhraseValidationsModel);
-    expect(set).toHaveBeenCalledWith({ consumedAt });
-    const query = new PgDialect().sqlToQuery(where.mock.calls[0][0]);
-    expect(query.sql).toBe('"phrase_validations"."id" = $1');
-    expect(query.params).toEqual([id]);
-    expect(insert).not.toHaveBeenCalled();
-    finish();
-    await pending;
-    expect(saved).toBe(true);
-  });
-  it.each([
-    [{ cause: { code: 'ECONNREFUSED' } }, DatabaseError],
-    [new Error('SQL'), DatabaseError],
-    [{ code: '23505', detail: 'private constraint data' }, DatabaseError],
-  ])('propagates consumption errors', async (error, kind) => {
-    where.mockRejectedValueOnce(error);
-    await expect(
-      repository.update(id, { consumedAt: new Date() }),
-    ).rejects.toMatchObject({ name: kind.name, cause: error });
-    expect(insert).not.toHaveBeenCalled();
-  });
-  it('updates provided fields beyond consumption without inserting', async () => {
-    await repository.update(id, {
-      text: PhraseText.forValidation('Updated'),
-      requiresConfirmation: false,
-      consumedAt: null,
-    });
-    expect(set).toHaveBeenCalledWith({
-      text: 'Updated',
-      requiresConfirmation: false,
-      consumedAt: null,
-    });
-    expect(insert).not.toHaveBeenCalled();
   });
   it('awaits exactly one INSERT into temporary table', async () => {
     let finish!: () => void;

@@ -9,11 +9,11 @@ import { toTimestamp } from '../../../../shared/domain/utils/to-timestamp';
 
 export class Phrase {
   private readonly _id: PhraseId;
-  private readonly _text: PhraseText;
-  private readonly _embedding: Embedding;
-  private readonly _normalizedText: NormalizedPhraseText;
-  private readonly _model: PhraseModel;
-  private readonly _createdAt: number;
+  private _text: PhraseText;
+  private _embedding: Embedding;
+  private _normalizedText: NormalizedPhraseText;
+  private _model: PhraseModel;
+  private _createdAt: number;
 
   private constructor(props: PhraseProps) {
     this._id = props.id;
@@ -22,7 +22,6 @@ export class Phrase {
     this._embedding = props.embedding;
     this._model = props.model;
     this._createdAt = toTimestamp(props.createdAt, 'createdAt');
-    Object.freeze(this);
   }
 
   static create(props: CreatePhraseProps): Phrase {

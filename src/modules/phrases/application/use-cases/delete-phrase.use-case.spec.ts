@@ -10,7 +10,6 @@ describe('DeletePhraseUseCase', () => {
   const useCase = new DeletePhraseUseCase({
     list: jest.fn(),
     findValidationMatch: jest.fn(),
-    save: jest.fn(),
     softDelete,
   });
   const id = '550e8400-e29b-41d4-a716-446655440000';

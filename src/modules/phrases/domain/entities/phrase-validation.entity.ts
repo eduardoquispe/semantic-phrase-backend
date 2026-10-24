@@ -3,9 +3,10 @@ import type { Embedding } from '../value-objects/embedding.value-object';
 import type { PhraseModel } from '../value-objects/phrase-model.value-object';
 import type { PhraseValidationProps } from '../types/phrase-validation-props.interface';
 import type { CreatePhraseValidationProps } from '../types/create-phrase-validation-input.interface';
-import type { PhraseValidationMatch } from '../value-objects/phrase-validation-match.value-object';
-import type { PhraseId } from '../value-objects/phrase-id.value-object';
+import type { SimilarityScore } from '../value-objects/similarity-score.value-object';
 import { NormalizedPhraseText } from '../value-objects/normalized-phrase-text.value-object';
+import { PhraseId } from '../value-objects/phrase-id.value-object';
+import { ValidationMatchEnum } from '../enums/validation-match.enum';
 import { toTimestamp } from '../../../../shared/domain/utils/to-timestamp';
 import {
   MS_PER_MINUTE,
@@ -20,15 +21,16 @@ import { PhraseValidationExpiredError } from '../errors/validation-expired.error
 
 export class PhraseValidation {
   private readonly _id: PhraseId;
-  private readonly _text: PhraseText;
-  private readonly _embedding: Embedding;
-  private readonly _model: PhraseModel;
-  private readonly _normalizedText: NormalizedPhraseText;
-  private readonly _requiresConfirmation: boolean;
-  private readonly _match: PhraseValidationMatch | null;
-  private readonly _createdAt: number;
-  private readonly _expiresAt: number;
-  private readonly _consumedAt: number | null;
+  private _text: PhraseText;
+  private _embedding: Embedding;
+  private _model: PhraseModel;
+  private _normalizedText: NormalizedPhraseText;
+  private _requiresConfirmation: boolean;
+  private _matchedPhraseId: PhraseId | null;
+  private _similarityScore: SimilarityScore | null;
+  private _createdAt: number;
+  private _expiresAt: number;
+  private _consumedAt: number | null;
 
   private constructor(props: PhraseValidationProps) {
     this._id = props.id;
@@ -37,15 +39,14 @@ export class PhraseValidation {
     this._model = props.model;
     this._normalizedText = props.normalizedText;
     this._requiresConfirmation = props.requiresConfirmation;
-    this._match = props.match;
+    this._matchedPhraseId = props.matchedPhraseId;
+    this._similarityScore = props.similarityScore;
     this._createdAt = toTimestamp(props.createdAt, 'createdAt');
     this._expiresAt = toTimestamp(props.expiresAt, 'expiresAt');
     this._consumedAt =
       props.consumedAt === null
         ? null
         : toTimestamp(props.consumedAt, 'consumedAt');
-
-    Object.freeze(this);
   }
 
   static create(props: CreatePhraseValidationProps): PhraseValidation {
@@ -62,15 +63,20 @@ export class PhraseValidation {
       createdAt.getTime() + props.ttlMinutes * MS_PER_MINUTE,
     );
 
+    const { match } = props;
+
     return new PhraseValidation({
       id: props.id,
       text: props.text,
       normalizedText: new NormalizedPhraseText(props.text.normalized),
       embedding: props.embedding,
       model: props.model,
-      match: props.match,
+      matchedPhraseId: match ? new PhraseId(match.phrase.id) : null,
+      similarityScore: match?.similarityScore ?? null,
       requiresConfirmation:
-        props.match?.requiresConfirmation(props.threshold) ?? false,
+        match !== null &&
+        (match.type === ValidationMatchEnum.TextualExact ||
+          match.similarityScore.value >= props.threshold),
       consumedAt: null,
       createdAt,
       expiresAt,
@@ -105,8 +111,12 @@ export class PhraseValidation {
     return this._requiresConfirmation;
   }
 
-  get match(): PhraseValidationMatch | null {
-    return this._match;
+  get matchedPhraseId(): string | null {
+    return this._matchedPhraseId?.value ?? null;
+  }
+
+  get similarityScore(): SimilarityScore | null {
+    return this._similarityScore;
   }
 
   get consumedAt(): Date | null {

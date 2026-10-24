@@ -78,9 +78,9 @@ Como persona que guarda una frase, quiero recibir éxito cuando terminen la inse
 
 **Acceptance Scenarios**:
 
-1. **Given** un fallo de inserción, **When** se solicita registrar, **Then** se propaga el error y no se intenta consumir la validación.
-2. **Given** una frase insertada, **When** falla el guardado del consumo, **Then** se propaga el error y la frase permanece insertada, sin compensación. Un reintento puede crear otra frase.
-3. **Given** dos solicitudes que leen la misma validación pendiente, **When** se registran simultáneamente, **Then** ambas pueden insertar frases; no existe garantía de registro único.
+1. **Given** un fallo de inserción, **When** se solicita registrar, **Then** se revierte la transacción: no se guarda la frase ni se consume la validación, y se propaga el error.
+2. **Given** un fallo al guardar el consumo, **When** se solicita registrar, **Then** se revierte la transacción: la frase no queda guardada y un reintento es seguro.
+3. **Given** dos solicitudes que leen la misma validación pendiente, **When** se registran simultáneamente, **Then** solo una guarda la frase; la otra recibe 409/`VALIDATION_ALREADY_USED`.
 4. **Given** consumo completado, **When** otra solicitud lee el comprobante, **Then** se rechaza con 409/`VALIDATION_ALREADY_USED` antes de escribir.
 5. **Given** dos validaciones diferentes aplicables, **When** se registran, **Then** pueden crear frases independientemente, sin unicidad global.
 6. **Given** una solicitud autorizada, **When** ambas escrituras terminan, **Then** se responde 201 conservando los datos almacenados sin nueva inferencia ni búsqueda.
@@ -92,13 +92,13 @@ Como cliente del backend, quiero que el registro respete las reglas de entrada d
 
 **Why this priority**: Mantiene la continuidad entre validación y registro sin introducir reglas adicionales.
 
-**Independent Test**: Enviar entradas en los límites de longitud y con controles, signos y emojis; comprobar admisibilidad y ausencia de límite por volumen.
+**Independent Test**: Enviar entradas en los límites de longitud y con controles, emojis, menos de 3 letras y puntuación; comprobar admisibilidad y ausencia de límite por volumen.
 
 **Acceptance Scenarios**:
 
 1. **Given** un original admisible de 280 puntos de código y su validación aplicable, **When** se registra, **Then** se permite el guardado; una entrada de 281 recibe 400/`VALIDATION_ERROR` sin consumo ni creación.
 2. **Given** texto ausente, de tipo distinto de cadena, vacío tras trim o con controles Unicode `Cc`, incluidas tabulación, LF y CR, **When** se solicita registrar, **Then** se responde 400/`VALIDATION_ERROR` sin consumo ni creación.
-3. **Given** signos o emojis sin letras, no vacíos y con validación aplicable, **When** se solicita registrar, **Then** no se rechazan por carecer de letras. Los espacios externos cuentan para el límite y el original se conserva.
+3. **Given** texto con puntuación y al menos 3 letras, y con validación aplicable, **When** se solicita registrar, **Then** se permite el guardado; texto con emojis o con menos de 3 letras (p. ej. `!!!`) recibe 400/`VALIDATION_ERROR` sin consumo ni creación. Los espacios externos cuentan para el límite y el original se conserva.
 4. **Given** solicitudes de registro, **When** su volumen supera 60 por minuto, **Then** F003 no impone un límite global ni responde 429/`RATE_LIMIT_EXCEEDED` por volumen; cada petición sigue su validación funcional normal.
 
 ### Edge Cases
@@ -111,7 +111,7 @@ Como cliente del backend, quiero que el registro respete las reglas de entrada d
 - La caída del servicio de embeddings después de validar no exige segunda inferencia para registrar. F003 no modifica las condiciones de arranque de la aplicación.
 - Una referencia eliminada físicamente no permite deducir expiración o consumo; no se inventa ese estado y se responde 400/`INVALID_VALIDATION_ID`.
 - Si varias causas de rechazo coinciden, no se define un orden nuevo de precedencia; los escenarios de error aíslan cada causa y siempre se impide el registro no autorizado.
-- El límite de nuevas creaciones es de 280 puntos de código del original, incluidos espacios externos; se conserva la lectura histórica de hasta 500 de F001. No se limita el volumen global de solicitudes.
+- El límite de nuevas creaciones es de 280 puntos de código del original, incluidos espacios externos; no existe excepción de lectura con otro límite. No se limita el volumen global de solicitudes.
 
 ## Requirements *(mandatory)*
 
@@ -126,7 +126,7 @@ Como cliente del backend, quiero que el registro respete las reglas de entrada d
 - **FR-007**: Una validación DEBE considerarse expirada al alcanzar su expiración. El registro NO DEBE prolongar vigencia ni sustituir una nueva validación por una confirmación.
 - **FR-008**: Leer y comprobar el comprobante en aplicación, construir la frase con sus datos y ejecutar secuencialmente phrases.save(phrase) y validations.update(id, { consumedAt }). Retornar tras ambas llamadas.
 - **FR-009**: Rechazar consumo previo observado en la lectura. No hay garantía de registro único ante solicitudes concurrentes ni revalidación durante las escrituras.
-- **FR-010**: No usar transacción ni compensación. Un fallo de inserción impide consumir; un fallo de consumo se propaga conservando la frase insertada.
+- **FR-010**: Guardar la frase y consumir la validación en una única transacción (todo o nada). El consumo es condicional a que la validación no esté consumida; si ya lo estaba se rechaza con 409/`VALIDATION_ALREADY_USED`.
 - **FR-011**: El sistema DEBE guardar el original validado, su texto normalizado con las reglas existentes, la misma representación semántica y modelo/versión. NO DEBE repetir inferencia, normalizar de nuevo el vector, buscar otra coincidencia ni reevaluar el umbral.
 - **FR-012**: El éxito DEBE responder 201 con exactamente `{data: {id, text, createdAt}}`; identificador UUID v4 y fecha/hora con zona horaria. NO DEBE exponer vectores, texto normalizado, modelo ni datos de validación.
 - **FR-013**: Los errores DEBEN usar `application/problem+json` con `title`, `status`, `detail`, `code` y opcionalmente `errors: [{field, messages: string[]}]`, sin `type` explícito, `timestamp`, `traceId`, secretos ni trazas. El estado HTTP DEBE coincidir con `status`.
@@ -134,7 +134,7 @@ Como cliente del backend, quiero que el registro respete las reglas de entrada d
 - **FR-015**: Cancelar o abandonar sin solicitar registro NO DEBE crear frases ni estados de cancelación. F003 NO DEBE añadir endpoints de confirmación, revocación, renovación ni consulta de validaciones temporales.
 - **FR-016**: Validaciones diferentes pueden registrarse independientemente si son aplicables; no existe bloqueo global ni corpus inmutable.
 - **FR-017**: El sistema DEBE mantener el alcance arquitectónico de trazabilidad temporal: consumir la validación al registrar, sin añadir auditoría permanente ni conservar obligatoriamente una asociación histórica entre frase y validación. La limpieza manual puede eliminar dicha evidencia sin afectar la frase definitiva; se acepta expresamente la excepción al brief sobre metadata y decisión humana permanentes por frase.
-- **FR-018**: La entrada de registro DEBE tener de 1 a 280 puntos de código Unicode del original, incluidos espacios externos, no quedar vacía tras trim y no contener controles Unicode `Cc`. NO DEBE exigirse al menos una letra. Se preserva el original y no se altera la lectura histórica de F001.
+- **FR-018**: La entrada de registro DEBE tener hasta 280 puntos de código Unicode del original, incluidos espacios externos, no quedar vacía tras trim, contener al menos 3 letras y no contener emojis ni controles Unicode `Cc`. Se preserva el original.
 - **FR-019**: F003 NO DEBE imponer un límite global por volumen de solicitudes ni producir 429/`RATE_LIMIT_EXCEEDED` por ese motivo. Se reutilizan las reglas existentes del flujo sin incorporar mecanismos nuevos de control de volumen.
 
 ### Contrato público de F003
@@ -165,7 +165,7 @@ Esta sección documenta el comportamiento externo con las decisiones HITL aproba
 
 | Estado / código | Condición |
 | --- | --- |
-| 400 / `VALIDATION_ERROR` | Texto/confirmación inválidos o campos ajenos al contrato en el body (`detail`: «Los datos enviados no son válidos.»); detalles por campo cuando corresponda. Incluye texto mayor de 280 puntos de código, vacío tras trim o con controles `Cc`. |
+| 400 / `VALIDATION_ERROR` | Texto/confirmación inválidos o campos ajenos al contrato en el body (`detail`: «Los datos enviados no son válidos.»); detalles por campo cuando corresponda. Incluye texto mayor de 280 puntos de código, vacío tras trim, con menos de 3 letras, con emojis o con controles `Cc`. |
 | 400 / `INVALID_VALIDATION_ID` | Referencia ausente, UUID malformado o referencia UUID v4 bien formada pero inexistente; no se infiere su estado anterior. |
 | 400 / `PHRASE_MISMATCH` | Original recibido distinto del asociado a la validación. |
 | 409 / `VALIDATION_EXPIRED` | Validación pendiente que alcanzó su expiración. |
@@ -196,7 +196,7 @@ F003 no realiza inferencia ni incorpora `AI_UNAVAILABLE` como error propio del r
 - **SC-007**: En todos los escenarios de respuesta, el cliente distingue creación, entrada inválida, confirmación pendiente, expiración, consumo previo, incompatibilidad de modelo y fallo técnico mediante el resultado público, sin datos internos expuestos. La referencia inexistente y la incompatibilidad se distinguen mediante el catálogo vigente.
 - **SC-008**: Todos los escenarios de cancelación sin solicitud de registro crean cero frases y cero registros adicionales de cancelación.
 
-- **SC-009**: Todos los casos de aceptación de longitud, espacios externos, controles, signos y emojis cumplen las mismas reglas de admisibilidad de F002; el volumen por sí solo no produce rechazos 429.
+- **SC-009**: Todos los casos de aceptación de longitud, espacios externos, controles, letras mínimas y emojis cumplen las mismas reglas de admisibilidad de F002; el volumen por sí solo no produce rechazos 429.
 - **SC-010**: En una comprobación de limpieza manual de validaciones temporales consumidas, las frases definitivas permanecen disponibles; no se exige reconstruir la evidencia histórica eliminada.
 
 No se inventa una meta de latencia de registro; los 5 segundos aprobados corresponden a F002.
@@ -205,7 +205,7 @@ No se inventa una meta de latencia de registro; los 5 segundos aprobados corresp
 
 ### Alcance y dependencias aprobadas
 
-- F003 solo registra y consume validaciones. Advertencias visuales, botones, conservar texto en pantalla y actualizar visualmente el listado corresponden al cliente. F001 conserva listado, paginación y lectura histórica.
+- F003 solo registra y consume validaciones. Advertencias visuales, botones, conservar texto en pantalla y actualizar visualmente el listado corresponden al cliente. F001 conserva listado y paginación.
 - F002 define admisibilidad de validación, prioridad textual, Top-1, umbral, generación, resultado temporal, UUID y expiración configurable inicialmente de 15 minutos. No se duplican esas responsabilidades.
 - Las decisiones explícitas de F002 sobre el servicio de embeddings existente prevalecen frente al pipeline local anterior para esa dependencia. F003 no altera modelo, runtime, umbral, proveedor ni condiciones de arranque.
 - Se conservan frase y validación independientes y sin historial permanente. Registro y consumo son escrituras secuenciales sin atomicidad.
@@ -227,17 +227,17 @@ Rutas relativas a la raíz del repositorio; no se modifican estas fuentes en el 
 | `docs/03-architecture/06-api-security.md` | §4.2, §6–§7 y §10: petición, booleano estricto, errores y continuidad HITL. |
 | `docs/03-architecture/openapi.yaml` | `createPhrase`, `CreatePhraseRequest`, `PhraseEnvelope`, errores; ajuste de creación aprobado en Q2-A y clasificación precisada en Q3-A. |
 | `apps/backend/specs/002-semantic-similarity-validation/spec.md` | Decisiones HITL, 280 puntos de código, sin límite global, UUID sin firma, resultado temporal y límites del registro futuro. |
-| `apps/backend/specs/001-list-phrases/spec.md` | Solo contraste: listado, lectura histórica hasta 500 puntos de código y retirada del límite global. |
+| `apps/backend/specs/001-list-phrases/spec.md` | Solo contraste: listado y retirada del límite global. |
 
 ### Decisiones HITL aprobadas
 
 - **Q1-A — Evidencia**: El usuario aprobó mantener el alcance arquitectónico sin auditoría permanente. Se acepta expresamente la excepción al brief FR-012, BR-014, AC-006 y AC-015 sobre metadata completa y decisión humana vinculadas permanentemente a cada frase. El consumo temporal refleja el uso de la validación, sin añadir historial ni asociación permanente.
-- **Q2-A — Continuidad contractual**: El usuario aprobó alinear F003 con F002 y pidió «lo más simple posible»: 1–280 puntos de código del original, trim no vacío, sin controles Cc, sin exigir letras y sin límite global/429. Se conservan lectura histórica de F001 y reglas existentes, sin introducir mecanismos adicionales.
+- **Q2-A — Continuidad contractual**: El usuario aprobó alinear F003 con F002 y pidió «lo más simple posible»: hasta 280 puntos de código del original, trim no vacío, al menos 3 letras, sin emojis ni controles Cc y sin límite global/429, con una única regla de texto en toda capa.
 - **Q3-A — Rechazos**: Tras consultar la alternativa más sencilla sin reingeniería, el usuario confirmó reutilizar 400/`INVALID_VALIDATION_ID` para referencia inexistente y 500/`INTERNAL_ERROR` para modelo/versión incompatible. Nota (implementación): el código final añadió `INCOMPATIBLE_MODEL` y responde 409 para la incompatibilidad; sigue sin consumir ni guardar, sin inferir estados anteriores.
 
 ### Compatibilidad
 
-Estas decisiones precisan F003 antes de implementar. Frente a `CreatePhraseRequest` en el OpenAPI consultado, el texto de nuevas creaciones pasa de 500 a 280 puntos de código y se retira 429 por volumen de esta operación. La lectura histórica de hasta 500 puntos de código de F001 no cambia. Se mantienen ruta, campos, booleano opcional, envoltorio de éxito y demás errores; Q3 reutilizó códigos existentes; la incompatibilidad quedó finalmente como 409/`INCOMPATIBLE_MODEL`.
+Estas decisiones precisan F003 antes de implementar. Frente a `CreatePhraseRequest` en el OpenAPI consultado, el texto de nuevas creaciones pasa de 500 a 280 puntos de código y se retira 429 por volumen de esta operación. La regla de texto es única: ya no existe la excepción de lectura de hasta 500 puntos de código. Se mantienen ruta, campos, booleano opcional, envoltorio de éxito y demás errores; Q3 reutilizó códigos existentes; la incompatibilidad quedó finalmente como 409/`INCOMPATIBLE_MODEL`.
 
 El contrato compartido y las secciones afectadas del bloque 06 deberán reflejar estos ajustes antes de implementar F003. Esta invocación actualiza la especificación y su checklist; no modifica fuentes externas al backend ni implementa código. Q1 documenta la excepción al brief sin rediseñar la persistencia.
 

@@ -3,7 +3,7 @@
 **Input**: spec.md, plan.md, data-model.md, research.md, contracts/ y quickstart.md de `specs/003-register-phrases-hitl/`.
 **Prerequisites**: Backend F001/F002 y `.specify/memory/constitution.md`.
 **Criterio de implementación**: Lo básico, claro y funcional. Reutilizar los componentes existentes y escribir funciones cortas con condiciones directas. Cada regla se implementa una vez; cada prueba debe comprobar un comportamiento útil. No añadir validaciones defensivas para estados ajenos al contrato ni combinaciones exhaustivas de errores.
-**Tests**: Unitarias para reglas y HTTP para el contrato. Verificar construcción, orden, fallos y persistencia parcial; no crear infraestructura de pruebas nueva.
+**Tests**: Unitarias para reglas y HTTP para el contrato. Verificar construcción, atomicidad, rollback y fallos; no crear infraestructura de pruebas nueva.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -13,7 +13,7 @@ Rutas relativas al backend. `[P]` indica archivos distintos que pueden trabajars
 
 **Objetivo**: Alinear el contrato antes de implementar el endpoint.
 
-- [X] T001 Sincronizar `../../docs/03-architecture/openapi.yaml` y `../../docs/03-architecture/06-api-security.md` según `specs/003-register-phrases-hitl/contracts/README.md`: texto nuevo de hasta 280 puntos de código, confirmed opcional booleano, UUID v4, errores aprobados y sin 429 por volumen; conservar lectura histórica y F002. Respetar los permisos de escritura de esos archivos externos al backend.
+- [X] T001 Sincronizar `../../docs/03-architecture/openapi.yaml` y `../../docs/03-architecture/06-api-security.md` según `specs/003-register-phrases-hitl/contracts/README.md`: texto nuevo de hasta 280 puntos de código, confirmed opcional booleano, UUID v4, errores aprobados y sin 429 por volumen; conservar F002. Respetar los permisos de escritura de esos archivos externos al backend.
 
 ## Phase 2: Foundational
 
@@ -34,7 +34,7 @@ Rutas relativas al backend. `[P]` indica archivos distintos que pueden trabajars
 - [X] T006 [P] [US1] Escribir los casos de éxito de CreatePhraseUseCase en `src/modules/phrases/application/use-cases/create-phrase.use-case.spec.ts`: confirmed omitido equivale a false, usa el modelo esperado y delega el registro sin inferencia ni búsqueda.
 - [X] T007 [P] [US1] Crear `test/phrase-registration.e2e-spec.ts` con configureApp y dobles existentes para validar → registrar → listar; comprobar 201 exactamente con data.id/text/createdAt, colección vacía/candidata bajo umbral y confirmed omitido/false/true. Reutilizar esta suite para las historias siguientes.
 - [X] T008 Implementar CreatePhraseUseCase: leer y validar comprobante, construir Phrase con datos almacenados y esperar phrases.save y validations.update en ese orden.
-- [X] T009 Añadir INSERT normal a PhraseRepositoryPort/DrizzlePhraseRepository y UPDATE parcial por id, usado para consumedAt en registro a PhraseValidationRepositoryPort/DrizzlePhraseValidationRepository; conservar INSERT temporal. Eliminar puerto, adaptador y pruebas de registro especializado.
+- [X] T009 Crear `PhraseRegistrationPort` y `DrizzlePhraseRegistrationRepository` (transacción: UPDATE condicional de consumedAt + INSERT de la frase). Retirar `PhraseRepositoryPort.save` y `PhraseValidationRepositoryPort.update`; conservar INSERT temporal.
 - [X] T010 [US1] Crear `src/modules/phrases/infrastructure/http/dtos/create-phrase-request.dto.ts`, y `src/modules/phrases/infrastructure/http/dtos/create-phrase-response.dto.ts` siguiendo F002: IsValidPhraseText existente, IsUUID('4'), ValidateIf para omitir solo undefined e IsBoolean sin coerción, respuesta pública mínima. Nota (implementación): no existe `create-phrase-query.dto.ts`; la query no se declara y se ignora.
 - [X] T011 [US1] Crear `src/modules/phrases/infrastructure/http/filters/phrase-registration.filter.ts` para traducir motivos al catálogo del contrato y errores DTO: validationId inválido usa INVALID_VALIDATION_ID, resto VALIDATION_ERROR. Reutilizar el builder, errors[].messages[] y manejo técnico global; probar las traducciones en `src/modules/phrases/infrastructure/http/filters/phrase-registration.filter.spec.ts` sin repetir reglas del caso de uso.
 - [X] T012 [US1] Conectar POST 201 en `src/modules/phrases/infrastructure/http/controllers/phrases.controller.ts`, respuesta en `src/modules/phrases/infrastructure/http/mapper/phrases.mapper.ts` y dependencias en `src/modules/phrases/phrases.module.ts`; aplicar los filtros de registro e InvalidValidationTextFilter solo al POST. Configurar PhraseModel desde AI_MODEL/AI_EMBEDDING_VERSION y adaptar los tests existentes afectados por el nuevo puerto/dependencia, incluidos controller y mapper. Requiere T001 y T008–T011.
@@ -59,19 +59,19 @@ Rutas relativas al backend. `[P]` indica archivos distintos que pueden trabajars
 
 ## Phase 6: User Story 4 — Conservar integridad ante fallos y envíos simultáneos (P1)
 
-**Objetivo**: Propagar fallos de cada guardado, conservando la frase si falla el consumo.
-**Prueba independiente**: Un fallo de inserción no intenta consumir; un fallo de consumo conserva la frase. Solicitudes simultáneas pueden crear varias frases (sin garantía de registro único). Dos validaciones distintas pueden guardar el mismo texto.
+**Objetivo**: Registrar de forma atómica: todo o nada, y un solo registro por comprobante.
+**Prueba independiente**: Un fallo de cualquier escritura no guarda la frase ni consume; solicitudes simultáneas con el mismo comprobante producen una frase y un 409. Dos validaciones distintas pueden guardar el mismo texto.
 
-- [X] T017 Probar INSERT de frase, UPDATE parcial por id y traducción de errores. Adaptar dobles y HTTP: error de inserción sin consumo; error de consumo conserva frase; reenvío tras éxito rechazado.
-- [X] T018 Sustituir la comprobación transaccional anterior por pruebas de escrituras independientes; documentar ausencia de rollback y garantía de registro único concurrente. No se requiere harness de BD real para esta simplificación.
+- [X] T017 Probar `DrizzlePhraseRegistrationRepository` (transacción, orden, 0 filas, traducción de errores). Adaptar dobles y HTTP: fallo de `register` no guarda ni consume; reenvío tras éxito rechazado.
+- [X] T018 Documentar la transacción única, el rollback y la garantía de registro único concurrente (UPDATE condicional). No se requiere harness de BD real; la atomicidad real se comprueba manualmente.
 
 ## Phase 7: User Story 5 — Aplicar la misma entrada admisible del flujo previo (P1)
 
-**Objetivo**: Reutilizar las reglas de entrada de F002 y conservar lectura histórica.
-**Prueba independiente**: Se admiten 280 puntos de código, signos/emojis y espacios originales; se rechazan 281, texto vacío/no cadena y controles Cc. El volumen no genera 429.
+**Objetivo**: Reutilizar las reglas de entrada de F002 (una única regla de texto en todas las capas).
+**Prueba independiente**: Se admiten 280 puntos de código, puntuación y espacios originales; se rechazan 281, emojis, menos de 3 letras, texto vacío/no cadena y controles Cc. El volumen no genera 429.
 
-- [X] T019 [US5] Añadir casos parametrizados en `test/phrase-registration.e2e-spec.ts` para límites 280/281, emojis, signos, espacios externos, vacío/no cadena y controles Cc; comprobar body desconocido (la query no declarada se ignora), lectura histórica hasta 500 y más de 60 solicitudes sin 429 por volumen. Reutilizar las pruebas del validador F002 en lugar de crear otra batería idéntica.
-- [X] T020 [US5] Verificar la reutilización de IsValidPhraseText en `src/modules/phrases/infrastructure/http/dtos/create-phrase-request.dto.ts` y PhraseText.forValidation en `src/modules/phrases/application/use-cases/create-phrase.use-case.ts`; corregir solo lo necesario para T019. Mantener el validador existente y el límite histórico de lectura.
+- [X] T019 [US5] Añadir casos parametrizados en `test/phrase-registration.e2e-spec.ts` para límites 280/281, emojis (rechazados), menos de 3 letras (rechazado), puntuación (admitida), espacios externos, vacío/no cadena y controles Cc; comprobar body desconocido (la query no declarada se ignora) y más de 60 solicitudes sin 429 por volumen. Reutilizar las pruebas del validador F002 en lugar de crear otra batería idéntica.
+- [X] T020 [US5] Verificar la reutilización de IsValidPhraseText en `src/modules/phrases/infrastructure/http/dtos/create-phrase-request.dto.ts` y el constructor de `PhraseText` en `src/modules/phrases/application/use-cases/create-phrase.use-case.ts`; corregir solo lo necesario para T019. Mantener el validador existente.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
@@ -107,4 +107,4 @@ T003 puede avanzar junto a T002. T021 puede avanzar junto a la revisión final, 
 
 Completar preparación y fundamentos, entregar US1 como MVP funcional y continuar con las historias en orden. Reutilizar las mismas reglas y suites. Mantener los dos repositorios existentes, funciones pequeñas y condiciones fáciles de seguir; no introducir abstracciones para casos futuros.
 
-Las pruebas con dobles acreditan reglas, secuencia, persistencia parcial y contrato HTTP; no acreditan unicidad concurrente. Cerrar cuando las comprobaciones requeridas pasen, informando cualquier pendiente. La implementación y su evidencia de pruebas están registradas en quickstart.md.
+Las pruebas con dobles acreditan reglas, secuencia de la transacción y contrato HTTP; la unicidad concurrente real se comprueba manualmente contra Postgres. Cerrar cuando las comprobaciones requeridas pasen, informando cualquier pendiente. La implementación y su evidencia de pruebas están registradas en quickstart.md.
