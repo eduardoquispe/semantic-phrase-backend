@@ -1,7 +1,7 @@
 import { AiUnavailableFilter } from '../filters/ai-unavailable.filter';
 import { InvalidValidationTextFilter } from '../filters/invalid-validation-text.filter';
 import { UseFilters } from '@nestjs/common';
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post } from '@nestjs/common';
 import { ValidatePhrasePort } from '../../../application/ports/inbound/validate-phrase.port';
 import { ValidatePhraseRequestDto } from '../dtos/validate-phrase-request.dto';
 import { PhraseValidationResponseDto } from '../dtos/phrase-validation-response.dto';
@@ -12,6 +12,7 @@ export class PhraseValidationsController {
   constructor(private readonly validatePhrase: ValidatePhrasePort) {}
 
   @Post()
+  @HttpCode(201)
   async validate(
     @Body() body: ValidatePhraseRequestDto,
   ): Promise<PhraseValidationResponseDto> {

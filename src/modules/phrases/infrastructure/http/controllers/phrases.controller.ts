@@ -2,7 +2,20 @@ import { CreatePhrasePort } from '../../../application/ports/inbound/create-phra
 import { CreatePhraseRequestDto } from '../dtos/create-phrase-request.dto';
 import { PhraseRegistrationFilter } from '../filters/phrase-registration.filter';
 import { InvalidValidationTextFilter } from '../filters/invalid-validation-text.filter';
-import { Body, Controller, Get, Post, Query, UseFilters } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  UseFilters,
+} from '@nestjs/common';
+import { DeletePhrasePort } from '../../../application/ports/inbound/delete-phrase.port';
+import { DeletePhraseParamsDto } from '../dtos/delete-phrase-params.dto';
+import { PhraseNotFoundFilter } from '../filters/phrase-not-found.filter';
 import { ListPhrasesQueryDto } from '../dtos/list-phrases-query.dto';
 import { ListPhrasesPort } from '../../../application/ports/inbound/list-phrases.port';
 import { InvalidEmbeddingFilter } from '../filters/invalid-embedding.filter';
@@ -20,9 +33,11 @@ export class PhrasesController {
   constructor(
     private readonly listPhrasesUseCase: ListPhrasesPort,
     private readonly createPhraseUseCase: CreatePhrasePort,
+    private readonly deletePhraseUseCase: DeletePhrasePort,
   ) {}
 
   @Post()
+  @HttpCode(201)
   @UseFilters(PhraseRegistrationFilter, InvalidValidationTextFilter)
   async post(@Body() body: CreatePhraseRequestDto) {
     const response = await this.createPhraseUseCase.execute(body);
@@ -30,8 +45,16 @@ export class PhrasesController {
   }
 
   @Get()
+  @HttpCode(200)
   async get(@Query() query: ListPhrasesQueryDto) {
     const list = await this.listPhrasesUseCase.execute(query);
     return PhrasesMapper.toListPhrasesResponseDto(list);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @UseFilters(PhraseNotFoundFilter)
+  async delete(@Param() { id }: DeletePhraseParamsDto): Promise<void> {
+    await this.deletePhraseUseCase.execute(id);
   }
 }

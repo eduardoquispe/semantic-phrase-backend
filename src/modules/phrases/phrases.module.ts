@@ -8,6 +8,8 @@ import { HuggingFaceEmbeddingAdapter } from './infrastructure/embeddings/huggin-
 import { PhraseValidationsController } from './infrastructure/http/controllers/phrase-validations.controller';
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../shared/infrastructure/database/database.module';
+import { DeletePhrasePort } from './application/ports/inbound/delete-phrase.port';
+import { DeletePhraseUseCase } from './application/use-cases/delete-phrase.use-case';
 import { ListPhrasesPort } from './application/ports/inbound/list-phrases.port';
 import { PhraseRepositoryPort } from './application/ports/outbound/phrase-repository.port';
 import { ListPhrasesUseCase } from './application/use-cases/list-phrases.use-case';
@@ -30,6 +32,8 @@ import { DrizzlePhraseValidationRepository } from './infrastructure/persistence/
     },
     ListPhrasesUseCase,
     { provide: ListPhrasesPort, useExisting: ListPhrasesUseCase },
+    DeletePhraseUseCase,
+    { provide: DeletePhrasePort, useExisting: DeletePhraseUseCase },
     { provide: PhraseRepositoryPort, useClass: DrizzlePhraseRepository },
   ],
 })

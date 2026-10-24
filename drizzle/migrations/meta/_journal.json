@@ -15,6 +15,13 @@
       "when": 1792648823678,
       "tag": "0001_fantastic_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792791839262,
+      "tag": "0002_sloppy_fallen_one",
+      "breakpoints": true
     }
   ]
 }

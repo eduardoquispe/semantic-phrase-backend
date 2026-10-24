@@ -14,6 +14,7 @@ describe('ValidatePhraseUseCase', () => {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
     save: jest.fn(),
+    softDelete: jest.fn(),
   };
   const validations = {
     findById: jest.fn(),

@@ -31,6 +31,7 @@ describe('CreatePhraseUseCase', () => {
     list: jest.fn(),
     findValidationMatch: jest.fn(),
     save: jest.fn(),
+    softDelete: jest.fn(),
   };
   const useCase = new CreatePhraseUseCase(
     validations,
@@ -121,10 +122,7 @@ describe('CreatePhraseUseCase', () => {
     [{ ...props, consumedAt: new Date() }, 'VALIDATION_ALREADY_USED'],
     [{ ...props, expiresAt: new Date(0) }, 'VALIDATION_EXPIRED'],
     [{ ...props, text: PhraseText.forValidation('hola') }, 'PHRASE_MISMATCH'],
-    [
-      { ...props, model: new PhraseModel('other', 'v1') },
-      'INCOMPATIBLE_MODEL',
-    ],
+    [{ ...props, model: new PhraseModel('other', 'v1') }, 'INCOMPATIBLE_MODEL'],
     [
       { ...props, model: new PhraseModel(model.id, 'other') },
       'INCOMPATIBLE_MODEL',

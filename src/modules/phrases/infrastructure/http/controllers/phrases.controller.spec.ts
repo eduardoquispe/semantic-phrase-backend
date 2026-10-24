@@ -13,7 +13,8 @@ describe('PhrasesController', () => {
   };
   const port = { execute: jest.fn().mockResolvedValue(result) };
   const create = { execute: jest.fn() };
-  const controller = new PhrasesController(port, create);
+  const remove = { execute: jest.fn() };
+  const controller = new PhrasesController(port, create, remove);
 
   it('delegates registration and maps only public phrase fields', async () => {
     const phrase = new Phrase({
@@ -41,6 +42,12 @@ describe('PhrasesController', () => {
     await expect(controller.post(input)).resolves.toEqual(response);
     expect(create.execute).toHaveBeenCalledWith(input);
     expect(PhrasesMapper.toCreatePhraseResponse(phrase)).toEqual(response);
+  });
+
+  it('delegates deletion and returns no body', async () => {
+    const id = '550e8400-e29b-41d4-a716-446655440000';
+    await expect(controller.delete({ id })).resolves.toBeUndefined();
+    expect(remove.execute).toHaveBeenCalledWith(id);
   });
 
   it('delegates defaults', async () => {
