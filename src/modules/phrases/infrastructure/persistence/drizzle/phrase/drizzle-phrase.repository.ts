@@ -4,7 +4,7 @@ import { ValidationMatch } from '../../../../domain/types/validation-match.type'
 import { SimilarityScore } from '../../../../domain/value-objects/similarity-score.value-object';
 import { ValidationSearchInput } from '../../../../application/ports/outbound/phrase-repository.port';
 import { DatabaseError } from '../../../../../../shared/infrastructure/database/errors/database.error';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { and, asc, cosineDistance, desc, eq, sql } from 'drizzle-orm';
 import {
   PhrasePageRows,
@@ -18,6 +18,8 @@ import { ValidationMatchEnum } from '../../../../domain/enums/validation-match.e
 
 @Injectable()
 export class DrizzlePhraseRepository implements PhraseRepositoryPort {
+  private readonly logger = new Logger(DrizzlePhraseRepository.name);
+
   constructor(private readonly database: DatabaseProvider) {}
 
   async save(phrase: Phrase): Promise<void> {
@@ -32,8 +34,15 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
   async findValidationMatch(
     input: ValidationSearchInput,
   ): Promise<ValidationMatch | null> {
+    this.logger.log(`Searching textual match: "${input.normalizedText}"`);
     const textualMatch = await this.findTextualMatch(input.normalizedText);
-    if (textualMatch) return textualMatch;
+    if (textualMatch) {
+      this.logger.log(
+        `Textual match found: id=${textualMatch.phrase.id} text="${textualMatch.phrase.text}"`,
+      );
+      return textualMatch;
+    }
+    this.logger.log('No textual match, falling back to vector search');
 
     const vectorMatch = await this.findVectorMatch(input);
     if (vectorMatch) return vectorMatch;
@@ -48,7 +57,13 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
     } catch (error) {
       throw new DatabaseError(error);
     }
-    if (anyActive) throw new IncompatiblePhraseCollectionError();
+    if (anyActive) {
+      this.logger.warn(
+        'Active phrases exist but none share the current model/version',
+      );
+      throw new IncompatiblePhraseCollectionError();
+    }
+    this.logger.log('No active phrases stored, no match');
     return null;
   }
 
@@ -91,6 +106,10 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
       JSON.stringify(input.embedding.values),
     );
     let match: { id: string; text: string; distance: number } | undefined;
+    const startedAt = Date.now();
+    this.logger.log(
+      `Vector search (cosine): model=${input.model.id}@${input.model.version} dimensions=${input.embedding.values.length}`,
+    );
 
     try {
       [match] = await this.database.client
@@ -113,11 +132,19 @@ export class DrizzlePhraseRepository implements PhraseRepositoryPort {
       throw new DatabaseError(error);
     }
 
-    if (!match) return null;
+    if (!match) {
+      this.logger.log(
+        `Vector search found no candidates for model ${input.model.id}@${input.model.version}`,
+      );
+      return null;
+    }
 
     let score = 1 - Number(match.distance);
     if (score > 1 && score <= 1 + 1e-6) score = 1;
     if (score < -1 && score >= -1 - 1e-6) score = -1;
+    this.logger.log(
+      `Nearest neighbor: id=${match.id} text="${match.text}" distance=${Number(match.distance).toFixed(6)} score=${score.toFixed(6)} took=${Date.now() - startedAt}ms`,
+    );
 
     return {
       type: ValidationMatchEnum.Vector,
