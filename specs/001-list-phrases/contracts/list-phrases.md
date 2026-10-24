@@ -8,8 +8,8 @@ Fuente canónica: `docs/03-architecture/openapi.yaml` de la raíz del repositori
 
 | Clave | Valor admitido | Predeterminado |
 | --- | --- | --- |
-| `page` | Entero decimal `>= 1` | `1` |
-| `limit` | Entero decimal entre `1` y `100` | `20` |
+| `page` | Entero `>= 1` (se convierte con `Number()`; p. ej. `1e2` equivale a 100) | `1` |
+| `limit` | Entero entre `1` y `100` (misma conversión) | `20` |
 
 Se responde 400 ante claves desconocidas o duplicadas, cadenas vacías, signos, fracciones, notación exponencial, valores no numéricos, cero, `limit` fuera de rango o valores que no puedan procesarse sin pérdida de precisión. Los predeterminados se aplican solo a claves omitidas.
 
@@ -23,7 +23,7 @@ Estado `200`, tipo de contenido `application/json`:
     {
       "id": "123e4567-e89b-42d3-a456-426614174000",
       "text": "Me gusta viajar a Cusco",
-      "createdAt": "2026-10-21T19:02:00Z"
+      "createdAt": "2026-10-21T19:02:00.000Z"
     }
   ],
   "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
@@ -44,6 +44,7 @@ Todos usan `application/problem+json` con `title`, `status`, `detail` y `code` o
 | 500 | `INVALID_PHRASE_TEXT` | Texto de una frase persistida inválido; mensaje público del dominio |
 | 500 | `INVALID_EMBEDDING` | Embedding inválido detectado durante el listado; `detail` contiene el mensaje público del error de dominio |
 | 500 | `DATABASE_ERROR` | Fallo de conexión, SQL o restricciones durante la consulta |
+| 404 / 5xx otros | `HTTP_ERROR` | Cualquier otra `HttpException` (p. ej. ruta inexistente; `detail`: «No se pudo completar la solicitud.») |
 
 Ejemplo ilustrativo de validación:
 
@@ -51,9 +52,9 @@ Ejemplo ilustrativo de validación:
 {
   "title": "Bad Request",
   "status": 400,
-  "detail": "Los parámetros de consulta no son válidos.",
+  "detail": "Los parámetros de la solicitud no son válidos.",
   "code": "VALIDATION_ERROR",
-  "errors": [{ "field": "page", "messages": ["Debe ser un entero decimal mayor o igual a 1."] }]
+  "errors": [{ "field": "page", "messages": ["page must not be less than 1"] }]
 }
 ```
 

@@ -11,16 +11,16 @@
 - [X] T001 Agregar versiones compatibles de `drizzle-orm`, `drizzle-kit`, `pg`, tipos de `pg`, `class-validator`, `class-transformer` en `package.json` y `pnpm-lock.yaml` mediante pnpm.
 - [X] T002 Registrar scripts explícitos de generación y ejecución de migraciones Drizzle (`db:generate`, `db:migrate`) en `package.json`; no ejecutar migraciones al iniciar la API.
 - [X] T003 [P] Documentar `DATABASE_URL`, `PORT` y los valores HTTP configurables usados por F001 con ejemplos locales seguros en `.env.example` y `README.md`.
-- [X] T004 [P] Configurar `drizzle.config.ts` para leer la URL de PostgreSQL, usar `src/modules/phrases/infrastructure/outbound/persistence/schema/phrases.schema.ts` y escribir migraciones en `drizzle/migrations/`.
+- [X] T004 [P] Configurar `drizzle.config.ts` para leer la URL de PostgreSQL, usar `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrases.model.ts` y escribir migraciones en `drizzle/migrations/`.
 
 ## Fase 2: Fundamentos
 
 **Objetivo**: preparar el esquema aprobado y una conexión de lectura compartida antes de implementar historias.
 
-- [X] T005 [P] Definir en `src/modules/phrases/infrastructure/outbound/persistence/schema/phrases.schema.ts` la tabla `phrases` completa: UUID `id`, `text`, `normalized_text` con índice B-tree no único, `embedding vector(384)`, `model_id`, `model_version` y `created_at`, con los tipos y restricciones de `data-model.md`.
-- [X] T006 Crear en `drizzle/migrations/` una migración versionada que habilite `vector` antes de crear `phrases` y su índice `normalized_text`; comprobar que corresponde a `src/modules/phrases/infrastructure/outbound/persistence/schema/phrases.schema.ts`.
-- [X] T007 [P] Crear `src/shared/infrastructure/database/database.module.ts` y `src/shared/infrastructure/database/database.provider.ts` con un único `pg.Pool` inyectable, validación de `DATABASE_URL` al inicio y cierre del pool al terminar; no conectar ni migrar durante el bootstrap.
-- [X] T008 Configurar el prefijo global `/api` en `src/main.ts` y excluir la ruta inicial `GET /` para conservar su comportamiento y el uso de `PORT`; cada controlador versionado definirá su segmento `v1`.
+- [X] T005 [P] Definir en `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrases.model.ts` la tabla `phrases` completa: UUID `id`, `text`, `normalized_text` con índice B-tree no único, `embedding vector(384)`, `model_id`, `model_version` y `created_at`, con los tipos y restricciones de `data-model.md`.
+- [X] T006 Crear en `drizzle/migrations/` una migración versionada que habilite `vector` antes de crear `phrases` y su índice `normalized_text`; comprobar que corresponde a `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrases.model.ts`.
+- [X] T007 [P] Crear `src/shared/infrastructure/database/database.module.ts` y `src/shared/infrastructure/database/database.provider.ts` con un único cliente Drizzle inyectable (`drizzle({ connection: { connectionString } })`, `connectionTimeoutMillis` de 5000 ms), validación de `DATABASE_URL` al inicio y cierre del pool al terminar; no conectar ni migrar durante el bootstrap.
+- [X] T008 Configurar el prefijo global `/api` en `src/configure-app.ts` (invocado desde `src/main.ts`); cada controlador versionado define su segmento `v1`. Nota (implementación): la ruta inicial `GET /` ya no existe y responde 404 (`test/app.e2e-spec.ts`); `configureApp` conserva un `exclude: ['/']` sin efecto.
 
 **Punto de control**: la migración se puede aplicar manualmente y el servidor tiene un proveedor de base de datos para las historias.
 
@@ -32,15 +32,15 @@
 
 ### Pruebas de la historia 1
 
-- [X] T009 [P] [US1] Escribir pruebas unitarias del caso de uso para conjunto vacío, proyección pública, orden recibido y metadatos de la primera página usando un doble del puerto en `src/modules/phrases/application/use-cases/list-phrases.use-case.spec.ts`; agregar una prueba unitaria básica en `src/modules/phrases/infrastructure/inbound/http/controllers/phrases.controller.spec.ts` que compruebe que el controlador delega la consulta sin parámetros al caso de uso y devuelve su resultado.
+- [X] T009 [P] [US1] Escribir pruebas unitarias del caso de uso para conjunto vacío, proyección pública, orden recibido y metadatos de la primera página usando un doble del puerto en `src/modules/phrases/application/use-cases/list-phrases.use-case.spec.ts`; agregar una prueba unitaria básica en `src/modules/phrases/infrastructure/http/controllers/phrases.controller.spec.ts` que compruebe que el controlador delega la consulta sin parámetros al caso de uso y devuelve su resultado.
 - [X] T010 [P] [US1] Escribir pruebas HTTP E2E para `GET /api/v1/phrases` sin parámetros, incluyendo 0, 1, 20 y 21 frases, empate de fecha, forma exacta de respuesta y ausencia de columnas privadas, con repositorio controlado en `test/phrases.e2e-spec.ts`; comprobar también que `GET /` conserva su respuesta.
 
 ### Implementación de la historia 1
 
 - [X] T011 [P] [US1] Definir el resultado de lectura pública y la operación de listar con total en `src/modules/phrases/application/ports/outbound/phrase-repository.port.ts`; exponer el contrato de entrada sin tipos HTTP en `src/modules/phrases/application/ports/inbound/list-phrases.port.ts`.
-- [X] T012 [US1] Implementar `src/modules/phrases/infrastructure/outbound/persistence/repositories/drizzle-phrase.repository.ts` con conteo y selección exclusiva de `id`, `text`, `created_at`, orden `created_at DESC, id DESC`, `LIMIT 20`, conversión de fecha a ISO con zona y vista coherente para conteo y filas cuando sea viable.
+- [X] T012 [US1] Implementar `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository.ts` con conteo y selección exclusiva de `id`, `text`, `created_at`, orden `created_at DESC, id DESC`, `LIMIT 20`, conversión de fecha a ISO con zona y vista coherente para conteo y filas cuando sea viable.
 - [X] T013 [US1] Implementar `src/modules/phrases/application/use-cases/list-phrases.use-case.ts` para devolver `{data,meta}` de la primera página, calcular `totalPages` (cero si `total=0`) y depender solo del puerto de repositorio.
-- [X] T014 [US1] Exponer `GET /api/v1/phrases` sin autenticación desde `src/modules/phrases/infrastructure/inbound/http/controllers/phrases.controller.ts`, definiendo `v1/phrases` en el controlador bajo el prefijo global `/api`, delegando en el puerto de entrada y devolviendo únicamente la respuesta contratada.
+- [X] T014 [US1] Exponer `GET /api/v1/phrases` sin autenticación desde `src/modules/phrases/infrastructure/http/controllers/phrases.controller.ts`, definiendo `v1/phrases` en el controlador bajo el prefijo global `/api`, delegando en el puerto de entrada y devolviendo únicamente la respuesta contratada.
 - [X] T015 [US1] Enlazar puertos, caso de uso, repositorio y proveedor de base de datos en `src/modules/phrases/phrases.module.ts`, e importar el módulo en `src/app.module.ts`.
 
 **Punto de control**: US1 se puede probar sin parámetros, con base vacía o con datos ya registrados.
@@ -53,14 +53,14 @@
 
 ### Pruebas de la historia 2
 
-- [X] T016 [P] [US2] Ampliar `src/modules/phrases/application/use-cases/list-phrases.use-case.spec.ts` con límites 1 y 100, 45 registros, página posterior y `totalPages=ceil(total/limit)`; ampliar `src/modules/phrases/infrastructure/inbound/http/controllers/phrases.controller.spec.ts` para comprobar que el controlador pasa `page` y `limit` al caso de uso.
+- [X] T016 [P] [US2] Ampliar `src/modules/phrases/application/use-cases/list-phrases.use-case.spec.ts` con límites 1 y 100, 45 registros, página posterior y `totalPages=ceil(total/limit)`; ampliar `src/modules/phrases/infrastructure/http/controllers/phrases.controller.spec.ts` para comprobar que el controlador pasa `page` y `limit` al caso de uso.
 - [X] T017 [P] [US2] Ampliar `test/phrases.e2e-spec.ts` con páginas 1–3 de 45 filas, `page=4` y un tamaño válido personalizado, comprobando orden, tamaño y los cuatro metadatos.
 
 ### Implementación de la historia 2
 
 - [X] T018 [US2] Definir entrada `page`/`limit` numérica en `src/modules/phrases/application/ports/inbound/list-phrases.port.ts` y pasarla por `src/modules/phrases/application/use-cases/list-phrases.use-case.ts` para calcular el resultado paginado.
-- [X] T019 [US2] Actualizar `src/modules/phrases/infrastructure/outbound/persistence/repositories/drizzle-phrase.repository.ts` para recibir `page`/`limit`, calcular `OFFSET` sin pérdida de precisión, aplicar `LIMIT` y conservar el total global incluso cuando la página esté vacía.
-- [X] T020 [US2] Crear `src/modules/phrases/infrastructure/inbound/http/dtos/list-phrases.query.dto.ts` con conversión decimal estricta, valores predeterminados solo para claves omitidas y rangos `page>=1`, `1<=limit<=100`; integrar la query en `src/modules/phrases/infrastructure/inbound/http/controllers/phrases.controller.ts` e instalar `ValidationPipe` global con `whitelist` y `forbidNonWhitelisted` en `src/main.ts` para aplicar esas restricciones desde US2.
+- [X] T019 [US2] Actualizar `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository.ts` para recibir `page`/`limit`, calcular `OFFSET` sin pérdida de precisión, aplicar `LIMIT` y conservar el total global incluso cuando la página esté vacía.
+- [X] T020 [US2] Crear `src/modules/phrases/infrastructure/http/dtos/list-phrases-query.dto.ts` con conversión decimal estricta, valores predeterminados solo para claves omitidas y rangos `page>=1`, `1<=limit<=100`; integrar la query en `src/modules/phrases/infrastructure/http/controllers/phrases.controller.ts` e instalar `ValidationPipe` global con `whitelist` y `forbidNonWhitelisted` en `src/main.ts` para aplicar esas restricciones desde US2. Nota (implementación): T044 pospuso el endurecimiento; el DTO usa `Number()` + `IsInt`, de modo que se aceptan `1e2`, `1.0` o `0x10`.
 
 **Punto de control**: US2 permite recorrer el conjunto sin añadir búsqueda, filtros ni orden configurable.
 
@@ -72,16 +72,16 @@
 
 ### Pruebas de la historia 3
 
-- [X] T021 [P] [US3] Probar sintaxis decimal, rangos, valores vacíos, signos, exponentes, duplicados, claves desconocidas y enteros inseguros en `src/modules/phrases/infrastructure/inbound/http/dtos/list-phrases.query.dto.spec.ts`.
+- [X] T021 [P] [US3] Probar sintaxis decimal, rangos, valores vacíos, signos, exponentes, duplicados, claves desconocidas y enteros inseguros en `src/modules/phrases/infrastructure/http/dtos/list-phrases-query.dto.spec.ts`. Nota (implementación): no se creó `list-phrases-query.dto.spec.ts` (ver el ajuste de Phase 8: sin pruebas de DTO); la sintaxis se cubre en `test/phrases.e2e-spec.ts`.
 - [X] T022 [P] [US3] Ampliar `test/phrases.e2e-spec.ts` para 400 y 500; verificar `Content-Type: application/problem+json`, `title`, `status`, `detail`, `code`, `errors` de validación y ausencia de detalles internos.
 
 ### Implementación de la historia 3
 
-- [X] T023 [US3] Rechazar en `src/modules/phrases/infrastructure/inbound/http/dtos/list-phrases.query.dto.ts` toda sintaxis o rango inválido y evitar conversiones permisivas; detectar claves desconocidas y repetidas en `src/modules/phrases/infrastructure/inbound/http/controllers/phrases.controller.ts` usando la query original.
+- [X] T023 [US3] Rechazar en `src/modules/phrases/infrastructure/http/dtos/list-phrases-query.dto.ts` toda sintaxis o rango inválido y evitar conversiones permisivas; detectar claves desconocidas y repetidas en `src/modules/phrases/infrastructure/http/controllers/phrases.controller.ts` usando la query original.
 - [X] T024 [US3] Integrar los errores del `ValidationPipe` global con `src/shared/infrastructure/http/filters/problem-details.filter.ts` para que las respuestas 400 incluyan `VALIDATION_ERROR` y los campos inválidos sin exponer detalles internos; mantener la conversión estricta de `page` y `limit`.
 - [X] T025 [P] [US3] Crear `src/shared/infrastructure/http/filters/problem-details.filter.ts` para traducir 400/`VALIDATION_ERROR`, 500/`INTERNAL_ERROR` y 500/`DATABASE_ERROR` al contrato `application/problem+json` sin SQL, trazas ni secretos.
-- [X] T026 [US3] Distinguir indisponibilidad de PostgreSQL de otros errores en `src/modules/phrases/infrastructure/outbound/persistence/repositories/drizzle-phrase.repository.ts` y expresar el fallo sin códigos HTTP mediante `src/shared/infrastructure/database/errors/database-unavailable.error.ts`.
-- [X] T027 [US3] Registrar el filtro Problem Details para toda la API en `src/main.ts`. El límite global de solicitudes se retiró por decisión del usuario.
+- [X] T026 [US3] Distinguir indisponibilidad de PostgreSQL de otros errores en `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository.ts` y expresar el fallo sin códigos HTTP mediante `src/shared/infrastructure/database/errors/database.error.ts`.
+- [X] T027 [US3] Registrar el filtro Problem Details para toda la API en `src/configure-app.ts`. El límite global de solicitudes se retiró por decisión del usuario.
 
 **Punto de control**: US3 diferencia una base vacía de un fallo y no revela datos internos.
 
@@ -89,7 +89,7 @@
 
 - [X] T028 [P] Actualizar `specs/001-list-phrases/quickstart.md` con los nombres efectivos de scripts y variables, la carga separada de datos de prueba y los comandos manuales de aceptación.
 - [X] T029 Ejecutar `pnpm run build`, `pnpm test` y `pnpm run test:e2e`; corregir únicamente los fallos de F001 en los archivos afectados de `src/modules/phrases/`, `src/shared/` y `test/phrases.e2e-spec.ts`.
-- [X] T030 Aplicar `pnpm run db:migrate` sobre PostgreSQL local y verificar el esquema de `drizzle/migrations/` y la consulta real de `src/modules/phrases/infrastructure/outbound/persistence/repositories/drizzle-phrase.repository.ts` con 0 y 45 filas de prueba, orden, proyección y paginación; no cargar datos al iniciar la API.
+- [X] T030 Aplicar `pnpm run db:migrate` sobre PostgreSQL local y verificar el esquema de `drizzle/migrations/` y la consulta real de `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrase.repository.ts` con 0 y 45 filas de prueba, orden, proyección y paginación; no cargar datos al iniciar la API.
 
 ## Fase 7: Modelo de dominio completo
 
@@ -107,7 +107,7 @@
 
 ### Refinamiento del dominio
 
-- [X] T036 Separar creación y reconstitución desde primitivos mediante `domain/factory/phrase.factory.ts` y añadir pruebas de normalización, invariantes e inmutabilidad.
+- [X] T036 (revertida: `domain/factory/phrase.factory.ts` no existe; ver T043, que descartó `PhraseFactory`) Separar creación y reconstitución desde primitivos mediante `domain/factory/phrase.factory.ts` y añadir pruebas de normalización, invariantes e inmutabilidad.
 - [X] T037 Extraer UUID v4 a `domain/value-objects/phrase-id.value-object.ts`, integrar en entidad y fábrica y añadir pruebas; simplificar la entidad confiando en value objects tipados y conservar solo validación directa de metadatos y fecha.
 - [X] T038 Alinear `spec.md`, `plan.md` y `data-model.md` con los refinamientos de dominio.
 - [X] T039 Verificar compilación, lint de archivos modificados y suite unitaria completa tras el refinamiento.
@@ -155,8 +155,8 @@ Evaluación centrada en estructura, distribución de responsabilidades y lógica
 - T043 — F4: No ejecutar por decisión del usuario: conservar la construcción actual; no incorporar `PhraseFactory` en esta fase.
 - T044 — F5: No ejecutar por decisión del usuario: conservar por ahora la validación y paginación actuales; no aplicar el endurecimiento propuesto en esta revisión.
 - T045 — F6: Actualizado por la unificación de BD: capturar fallos de consultas y escrituras como `DatabaseError`, sin clasificar códigos y conservando la causa.
-- [X] T046 — F7: Actualizar únicamente `drizzle.config.ts` para apuntar al esquema existente `src/modules/phrases/infrastructure/persistence/drizzle/drizzle-phrases.model.ts`; conservar la organización actual de adaptadores y las migraciones, según decisión del usuario (contradicts).
+- [X] T046 — F7: Actualizar únicamente `drizzle.config.ts` para apuntar al esquema existente `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrases.model.ts`; conservar la organización actual de adaptadores y las migraciones, según decisión del usuario (contradicts).
 - [X] T047 — F8: Conservar únicamente `InvalidPhraseError`, `InvalidPhraseTextError` e `InvalidEmbeddingError` como errores concretos de dominio, con la base `DomainError`. Mantener los filtros de frase y embedding e incorporar `InvalidPhraseTextFilter` en infraestructura, registrando los tres en el controlador con HTTP 500 y códigos específicos. Documentar los códigos y verificar los tres mediante la prueba HTTP existente parametrizada, según aprobación del usuario y spec: decisiones de revisión (unrequested).
 - T048 — F9: Pospuesto por decisión del usuario: conservar por ahora la firma actual de `Embedding`; no ampliar a `readonly number[]` en esta fase.
 
-**Verificación de la implementación — 2026-10-22**: `pnpm run build` y `pnpm exec tsc --noEmit --incremental false` aprobados; 132 pruebas unitarias y 26 pruebas HTTP E2E aprobadas. `pnpm exec eslint src test` sin errores; conserva un warning previo de promesa no esperada en `src/main.ts`. Las únicas pruebas nuevas son las de `ListPhrasesUseCase`; las demás suites se corrigieron o adaptaron a las decisiones actuales. No se ejecutaron migraciones ni se modificó la base de datos.
+**Verificación de la implementación — 2026-10-22**: `pnpm run build` y `pnpm exec tsc --noEmit --incremental false` aprobados; 132 pruebas unitarias y 26 pruebas HTTP E2E aprobadas (cifras históricas de esa fecha; a 2026-10-24 el backend completo suma 318 unitarias y 115 E2E aprobadas). `pnpm exec eslint src test` sin errores; conserva un warning previo de promesa no esperada en `src/main.ts`. Las únicas pruebas nuevas son las de `ListPhrasesUseCase`; las demás suites se corrigieron o adaptaron a las decisiones actuales. No se ejecutaron migraciones ni se modificó la base de datos.

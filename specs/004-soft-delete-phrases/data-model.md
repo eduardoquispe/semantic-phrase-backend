@@ -5,11 +5,11 @@
 | Columna | Tipo | Nulabilidad | Notas |
 |---|---|---|---|
 | `status` (NEW) | `smallint` + CHECK (`1`,`2`) | NOT NULL, default `1` | Estado de la frase; filtro de todas las consultas. Irreversible desde la API. |
-| `deleted_at` (NEW) | `timestamptz` | NULL, sin default | Fecha de eliminación; no nulo solo si `status = 2`. |
+| `deleted_at` (NEW) | `timestamptz` | NULL, sin default | Fecha de eliminación; la escribe `softDelete` junto con `status = 2` (no hay restricción en BD que ligue ambas columnas; el único CHECK es `status IN (1, 2)`). |
 
 Resto de columnas sin cambios (`id`, `text`, `normalized_text`, `embedding`, `model_id`, `model_version`, `created_at`).
 
-Migración: `ALTER TABLE "phrases" ADD COLUMN "status" smallint DEFAULT 1 NOT NULL, ADD COLUMN "deleted_at" timestamp with time zone;` (generada por `pnpm run db:generate`). Filas existentes quedan con `status = 1` y `deleted_at` NULL. El CHECK se añade a mano si Drizzle no lo genera.
+Migración: `ALTER TABLE "phrases" ADD COLUMN "status" smallint DEFAULT 1 NOT NULL, ADD COLUMN "deleted_at" timestamp with time zone;` (generada por `pnpm run db:generate`). Filas existentes quedan con `status = 1` y `deleted_at` NULL. Drizzle generó el CHECK `phrases_status_check` en `0002_*.sql` (definido en `drizzle-phrases.model.ts`); no hubo que añadirlo a mano.
 
 ## Estados
 

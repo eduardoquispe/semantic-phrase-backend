@@ -14,7 +14,7 @@ Implementar `GET /api/v1/phrases` para consultar la lista compartida sin autenti
 
 **Dependencias principales**: NestJS, Jest, ts-jest y Supertest ya presentes; agregar Drizzle ORM/Kit, `pg`, `class-validator`, `class-transformer` para los usos concretos de F001. Comprobar compatibilidad de versiones al instalarlas.
 
-**Persistencia**: PostgreSQL con pgvector (`pgvector/pgvector:pg17` en el `compose.yaml` de la raíz), Drizzle ORM, migraciones versionadas y un `pg.Pool` compartido. F001 lee únicamente la tabla `phrases`.
+**Persistencia**: PostgreSQL con pgvector (`pgvector/pgvector:pg17` en el `compose.yaml` de la raíz), Drizzle ORM, migraciones versionadas y un cliente Drizzle compartido (`DatabaseProvider`). F001 lee únicamente la tabla `phrases`.
 
 **Pruebas**: Unitarias Jest junto al código para validación de parámetros y caso de uso; pruebas HTTP E2E en `test/*.e2e-spec.ts` con dobles del repositorio; comprobación manual con PostgreSQL local para migración y consulta real.
 
@@ -58,26 +58,25 @@ specs/001-list-phrases/
 
 ```text
 src/
-├── main.ts                                      # prefijo API y configuración HTTP global
+├── main.ts                                      # arranque; delega en configure-app.ts
+├── configure-app.ts                             # prefijo API, ValidationPipe, CORS y filtro global
 ├── app.module.ts                                # composición de PhrasesModule
 ├── modules/phrases/
 │   ├── domain/
 │   │   ├── entities/phrase.entity.ts             # agregado completo, independiente del listado
-│   │   ├── factory/phrase.factory.ts             # creación y reconstitución desde primitivos
 │   │   ├── value-objects/                        # PhraseText y Embedding
 │   │   └── errors/                               # invariantes sin conceptos HTTP
 │   ├── application/
-│   │   ├── models/phrase-list-item.model.ts       # proyección de lectura
 │   │   ├── ports/inbound/list-phrases.port.ts
 │   │   ├── ports/outbound/phrase-repository.port.ts
 │   │   └── use-cases/list-phrases.use-case.ts
 │   ├── infrastructure/
-│   │   ├── inbound/http/
+│   │   ├── http/
 │   │   │   ├── controllers/phrases.controller.ts
-│   │   │   └── dtos/list-phrases.query.dto.ts
-│   │   └── outbound/persistence/
-│   │       ├── schema/phrases.schema.ts
-│   │       └── repositories/drizzle-phrase.repository.ts
+│   │   │   └── dtos/list-phrases-query.dto.ts
+│   │   └── persistence/drizzle/phrase/
+│   │       ├── drizzle-phrases.model.ts
+│   │       └── drizzle-phrase.repository.ts
 │   └── phrases.module.ts
 └── shared/infrastructure/
     ├── database/                                # pool, proveedor y cierre
@@ -99,8 +98,8 @@ Las decisiones están en [research.md](research.md). La arquitectura aprobada y 
 
 Consultar [data-model.md](data-model.md), [contracts/list-phrases.md](contracts/list-phrases.md) y [quickstart.md](quickstart.md).
 
-- Validar léxicamente los parámetros decimales antes de convertirlos a números; rechazar claves duplicadas y desconocidas, y valores que pierdan precisión. Aplicar valores predeterminados solo cuando falte la clave. Activar `ValidationPipe` al incorporar la paginación en US2; completar la respuesta Problem Details de validación en US3.
-- Obtener total y filas mediante el puerto de repositorio. Usar una misma vista de lectura de base de datos para ambos valores cuando sea viable; no se garantiza una vista común entre solicitudes HTTP distintas.
+- Nota (implementación): la validación léxica decimal estricta no se aplicó (T044); el DTO convierte con `Number()` y valida con `IsInt`/rangos. Plan original: validar léxicamente los parámetros decimales antes de convertirlos a números; rechazar claves duplicadas y desconocidas, y valores que pierdan precisión. Aplicar valores predeterminados solo cuando falte la clave. Activar `ValidationPipe` al incorporar la paginación en US2; completar la respuesta Problem Details de validación en US3.
+- Obtener total y filas mediante el puerto de repositorio. El repositorio ejecuta dos consultas secuenciales (conteo y filas) sin transacción común; no se garantiza una vista común entre solicitudes HTTP distintas.
 - Traducir fallos de conexión, SQL y restricciones de base de datos a 500/`DATABASE_ERROR` y fallos inesperados a 500 seguro. El filtro compartido producirá `application/problem+json` para 400 y 500.
 - Centralizar el cuerpo en `buildProblemDetail`, con contratos `ProblemDetail` y `ProblemFieldError`; validación agrupada en `messages: string[]`, sin `timestamp` ni `traceId`. Registrar `InvalidEmbeddingFilter` en el controlador mediante `@UseFilters`, usando la base compartida `DomainExceptionFilter`; devolver 500/`INVALID_EMBEDDING` con su mensaje público porque el listado no recibe embeddings del cliente.
 - Mantener `docs/03-architecture/openapi.yaml` de la raíz como contrato canónico. El documento de F001 es una guía de implementación.
@@ -110,7 +109,7 @@ Consultar [data-model.md](data-model.md), [contracts/list-phrases.md](contracts/
 
 ## Incorporación del dominio completo
 
-Refinar la construcción mediante `PhraseFactory.create` (normalización derivada) y `reconstitute` (normalización persistida obligatoria), sin efectos externos. Extraer la regla UUID v4 al value object inmutable `PhraseId`; exigirlo en `PhraseProps` y conservar el getter público string. La entidad confía en los value objects tipados, sin conversiones de primitivos ni comprobaciones redundantes de sus clases. Validar metadatos y fecha directamente en el constructor, sin helpers adicionales, y aceptar vectores de solo lectura en `Embedding`. Verificar estas reglas con pruebas junto al código y mantener el listado desacoplado del agregado.
+Nota (implementación): `PhraseFactory` no se implementó (T043); `Phrase` se construye con su constructor público. Texto original del plan: refinar la construcción mediante `PhraseFactory.create` (normalización derivada) y `reconstitute` (normalización persistida obligatoria), sin efectos externos. Extraer la regla UUID v4 al value object inmutable `PhraseId`; exigirlo en `PhraseProps` y conservar el getter público string. La entidad confía en los value objects tipados, sin conversiones de primitivos ni comprobaciones redundantes de sus clases. Validar metadatos y fecha directamente en el constructor, sin helpers adicionales, y aceptar vectores de solo lectura en `Embedding`. Verificar estas reglas con pruebas junto al código y mantener el listado desacoplado del agregado.
 
 Implementar únicamente dominio y sus pruebas, manteniendo intactas la proyección de lectura y las capas de aplicación e infraestructura. `Phrase` recibe UUID v4, fecha válida, `PhraseText`, `normalizedText` explícito y no vacío, `Embedding` y metadatos del modelo obligatorios. La entidad conserva el texto normalizado recibido sin recalcularlo para permitir reconstruir valores persistidos. `PhraseText` conserva el original, limita a 500 puntos de código Unicode y rechaza texto vacío tras trim y todo control Unicode `Cc`, incluidas tabulación, LF y CR. La normalización pura y única aplica trim, minúsculas y compresión de espacios `\s`, preservando tildes y puntuación. `Embedding` encapsula 384 números finitos sin normalizarlos; el generador conserva la responsabilidad de verificar norma L2.
 
@@ -118,6 +117,6 @@ Proteger el estado mediante copias defensivas e inmutabilidad y expresar violaci
 
 ## Ajustes de implementación aprobados — 2026-10-22
 
-Prevalecen las decisiones de revisión de `spec.md`. Conservar las carpetas actuales `infrastructure/http/` e `infrastructure/persistence/drizzle/`; `drizzle.config.ts` debe apuntar a `src/modules/phrases/infrastructure/persistence/drizzle/drizzle-phrases.model.ts`. No mover adaptadores ni generar migraciones por este ajuste.
+Prevalecen las decisiones de revisión de `spec.md`. Conservar las carpetas actuales `infrastructure/http/` e `infrastructure/persistence/drizzle/`; `drizzle.config.ts` debe apuntar a `src/modules/phrases/infrastructure/persistence/drizzle/phrase/drizzle-phrases.model.ts`. No mover adaptadores ni generar migraciones por este ajuste.
 
 Mantener el constructor público de `Phrase` y ambos mappers. El constructor de la entidad compone `NormalizedPhraseText`, `PhraseModel` y `PhraseCreatedAt`, sin validadores genéricos ni bucles. Los getters públicos y `PhraseProps` conservan sus tipos existentes. Las validaciones usan `InvalidPhraseError`; no crear nuevos errores por campo. Registrar `InvalidPhraseTextFilter` junto a los filtros existentes de frase y embedding, todos con HTTP 500. Los errores PostgreSQL se convierten en `DatabaseError` con causa y se devuelven como 500/`DATABASE_ERROR`. Verificar repositorios, filtro global, casos de uso y HTTP.

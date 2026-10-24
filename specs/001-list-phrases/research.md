@@ -10,19 +10,19 @@ El backend sigue siendo el proyecto inicial de NestJS. Estas decisiones concilia
 
 ## Parámetros y paginación
 
-- **Decisión**: Aceptar cadenas de dígitos decimales para `page` y `limit`. Usar 1 y 20 solo cuando se omitan. Rechazar como 400 valores vacíos, con signo, fraccionarios, exponenciales, duplicados, desconocidos o numéricamente inseguros. Exigir `page >= 1` y `1 <= limit <= 100`; calcular el desplazamiento sin redondeo. Una página posterior a la última devuelve `data` vacío y conserva la página solicitada y los totales reales.
+- **Decisión**: Nota (implementación): el código convierte con `Number()` y `IsInt` (acepta p. ej. `1e2`, `1.0`, `0x10`; rechaza arreglos y texto no numérico). Decisión original: aceptar cadenas de dígitos decimales para `page` y `limit`. Usar 1 y 20 solo cuando se omitan. Rechazar como 400 valores vacíos, con signo, fraccionarios, exponenciales, duplicados, desconocidos o numéricamente inseguros. Exigir `page >= 1` y `1 <= limit <= 100`; calcular el desplazamiento sin redondeo. Una página posterior a la última devuelve `data` vacío y conserva la página solicitada y los totales reales.
 - **Motivo**: La conversión implícita y `parseInt` pueden aceptar formas excluidas por FR-007. Las claves duplicadas y los números inseguros pueden alterar silenciosamente la página.
 - **Alternativas consideradas**: Conversión amplia con `Number()` o `parseInt`; imponer un máximo arbitrario de página agregaría un límite funcional no documentado.
 
 ## Persistencia y migración
 
-- **Decisión**: Usar PostgreSQL, pgvector y Drizzle con un `pg.Pool` compartido. Una migración versionada habilitará `vector` antes de crear la tabla `phrases` con el esquema físico completo aprobado. F001 seleccionará solo `id`, `text` y `created_at`, además de contar todas las frases.
+- **Decisión**: Usar PostgreSQL, pgvector y Drizzle con un cliente Drizzle compartido (sin `pg.Pool` explícito). Una migración versionada habilitará `vector` antes de crear la tabla `phrases` con el esquema físico completo aprobado. F001 seleccionará solo `id`, `text` y `created_at`, además de contar todas las frases.
 - **Motivo**: B05 fija la tecnología y el esquema, incluidos `embedding vector(384)` y columnas del modelo no nulas aunque F001 no las lea. El Docker Compose de la raíz ya ofrece pgvector y volumen persistente.
 - **Alternativas consideradas**: Datos en memoria o una tabla reducida para F001 impedirían consultar frases reales o respetar el esquema. `phrase_validations` no aporta valor a esta funcionalidad.
 
 ## Consistencia y orden
 
-- **Decisión**: Ordenar por `created_at DESC, id DESC`, paginar con `LIMIT/OFFSET` validado y calcular `totalPages = ceil(total/limit)`, o cero si no hay filas. Procurar que el conteo y las filas compartan una vista de lectura dentro de una respuesta. No prometer estabilidad entre solicitudes.
+- **Decisión**: Ordenar por `created_at DESC, id DESC`, paginar con `LIMIT/OFFSET` validado y calcular `totalPages = ceil(total/limit)`, o cero si no hay filas. Nota (implementación): conteo y filas son dos consultas secuenciales sin transacción. Original: procurar que el conteo y las filas compartan una vista de lectura dentro de una respuesta. No prometer estabilidad entre solicitudes.
 - **Motivo**: La especificación y B05 fijan orden y paginación. El identificador desempata fechas iguales; una vista común evita metadatos contradictorios si ocurre una inserción entre consultas.
 - **Alternativas consideradas**: Paginación por cursor u orden configurable cambiarían el contrato. Un índice compuesto sin medición sería prematuro para la escala local de aceptación.
 

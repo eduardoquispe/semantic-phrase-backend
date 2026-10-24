@@ -60,7 +60,7 @@ Como cliente de la lista, quiero recibir un error claro cuando los parámetros s
 
 - Dos frases con la misma fecha de creación se ordenan por identificador descendente para dar un orden determinista.
 - Una página posterior a la última es válida y devuelve `data=[]`; `totalPages` es cero solo cuando no hay frases.
-- Los valores `page` y `limit` se aceptan solo como enteros decimales en sus rangos; fracciones, texto, cero y valores negativos son inválidos. Los parámetros desconocidos se rechazan.
+- Los valores `page` y `limit` se convierten con `Number()` y deben ser enteros en sus rangos; fracciones, texto, cero y valores negativos son inválidos (notación como `1e2` o `1.0` también se acepta en el código actual). Los parámetros desconocidos se rechazan.
 - La paginación entre solicitudes no promete una vista inmutable: si se agregan frases mientras se recorren páginas, sus posiciones pueden cambiar.
 - La lista compartida es accesible sin cuenta de usuario; no se filtra por propietario.
 
@@ -73,11 +73,11 @@ Como cliente de la lista, quiero recibir un error claro cuando los parámetros s
 - **FR-003**: Cada frase de `data` DEBE contener `id` (identificador UUID), `text` y `createdAt` (fecha y hora con zona horaria). No DEBE incluir representaciones semánticas, texto normalizado, datos del modelo ni validaciones temporales.
 - **FR-004**: El sistema DEBE ordenar por fecha de creación descendente y usar identificador descendente para desempatar. No habrá orden configurable en F001.
 - **FR-005**: El sistema DEBE admitir `page` como entero desde 1, con valor predeterminado 1, y `limit` como entero entre 1 y 100, con valor predeterminado 20.
-- **FR-006**: El sistema DEBE devolver como máximo `limit` frases correspondientes a la página solicitada; `total` DEBE representar todas las frases registradas y `totalPages` DEBE ser `ceil(total/limit)`, o 0 cuando `total=0`.
+- **FR-006**: El sistema DEBE devolver como máximo `limit` frases correspondientes a la página solicitada; `total` DEBE representar todas las frases registradas activas (desde F004, solo `status = 1`) y `totalPages` DEBE ser `ceil(total/limit)`, o 0 cuando `total=0`.
 - **FR-007**: El sistema DEBE rechazar con estado 400 los parámetros inválidos o ajenos al contrato, sin convertir silenciosamente valores no enteros a enteros válidos.
 - **FR-008**: Los errores de F001 DEBEN usar una respuesta `application/problem+json` con `title`, `status`, `detail` y `code`, y `errors: [{field, messages: string[]}]` opcional para fallos de validación, sin `timestamp` ni `traceId`. Los estados y códigos aplicables son 400/`VALIDATION_ERROR`, 500/`INTERNAL_ERROR`, 500/`INVALID_EMBEDDING` y 500/`DATABASE_ERROR`. El error de embedding conserva su mensaje público mediante un filtro específico del controlador; los errores inesperados usan un mensaje genérico.
 - **FR-009**: Ante una consulta fallida, el sistema DEBE informar el error sin devolver un resultado exitoso vacío ni revelar datos internos o secretos.
-- **FR-010**: F001 solo consulta frases registradas. No incluye registrar, validar, editar, eliminar, buscar, filtrar ni cambiar el orden.
+- **FR-010**: F001 solo consulta frases registradas. No incluye registrar, validar, editar, eliminar, buscar, filtrar ni cambiar el orden. Nota (implementación): F003 y F004 añadieron después registrar y eliminar (soft delete) en el mismo recurso; ver sus specs.
 
 ### Entidades clave
 
@@ -88,7 +88,7 @@ Como cliente de la lista, quiero recibir un error claro cuando los parámetros s
 
 El módulo incorpora `Phrase` como entidad completa con identidad UUID v4, texto original, texto normalizado recibido explícitamente, embedding de 384 componentes finitos, identificador y versión de modelo y fecha de creación. `PhraseText` protege la admisibilidad del texto (1–500 puntos de código Unicode, no vacío tras trim y sin caracteres de control Unicode `Cc`, incluidas tabulación, LF y CR). `Embedding` encapsula el vector sin normalizarlo. Las invariantes se expresan mediante errores de dominio sin dependencias tecnológicas.
 
-La construcción desde primitivos se concentra en `PhraseFactory`: `create` deriva el texto normalizado del original; `reconstitute` exige y conserva el valor persistido sin recalcularlo. Ambos caminos reciben identidad y fecha explícitas y protegen las mismas invariantes, sin eventos ni efectos externos.
+Nota (implementación): `PhraseFactory` no se implementó (T043: «conservar la construcción actual»); `Phrase` se construye con su constructor público. Texto original: la construcción desde primitivos se concentraría en `PhraseFactory`: `create` deriva el texto normalizado del original; `reconstitute` exige y conserva el valor persistido sin recalcularlo. Ambos caminos reciben identidad y fecha explícitas y protegen las mismas invariantes, sin eventos ni efectos externos.
 
 La identidad se encapsula en el value object inmutable `PhraseId`, responsable de validar UUID v4. La entidad conserva el acceso público `phrase.id` como string.
 

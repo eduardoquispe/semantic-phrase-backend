@@ -2,7 +2,8 @@ import { InvalidPhraseError } from '../errors/invalid-phrase.error';
 import { Embedding } from '../value-objects/embedding.value-object';
 import { PhraseId } from '../value-objects/phrase-id.value-object';
 import { PhraseText } from '../value-objects/phrase-text.value-object';
-import { Phrase, PhraseProps } from './phrase.entity';
+import type { PhraseProps } from '../types/phrase-props.interface';
+import { Phrase } from './phrase.entity';
 
 describe('Phrase', () => {
   const props = (): PhraseProps => ({

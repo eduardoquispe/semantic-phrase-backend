@@ -10,7 +10,7 @@ Investigación completada el 2026-10-22. Base: implementación actual, spec apro
 
 ## 2. Leer el resultado conservado sin recalcularlo
 
-**Decision**: `findById` devuelve una proyección de aplicación `StoredPhraseValidation`, definida junto al puerto outbound y mapeada explícitamente. Incluye datos de registro y estado; el mapper convierte vector/fecha y usa objetos de valor existentes donde corresponde.
+**Decision**: `findById` devuelve la entidad `PhraseValidation` (la proyección `StoredPhraseValidation` inicialmente prevista no se implementó), mapeada explícitamente. Incluye datos de registro y estado; el mapper convierte vector/fecha y usa objetos de valor existentes donde corresponde.
 
 **Rationale**: `PhraseValidation` actual solo sirve para emitir: `consumedAt = null`, alerta recalculada desde match/threshold y normalizado derivado. No representa una fila ya consumida ni conserva una alerta histórica al cambiar umbral. Para registrar no se necesita reconstruir candidata ni score.
 

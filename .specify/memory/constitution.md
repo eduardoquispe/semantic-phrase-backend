@@ -1,7 +1,7 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.1.0 (expanded architecture principle).
-- Modified principles: I. Feature Modules → I. Modular Hexagonal Architecture.
+- Version change: 1.1.0 → 1.1.1 (clarified technical constraints to match the implemented stack).
+- Modified principles: none.
 - Added sections: none.
 - Removed sections: none.
 - Follow-up TODOs: none.
@@ -35,7 +35,10 @@ safe example values so local setup remains reproducible.
 
 ## Technical Constraints
 
-Use TypeScript, NestJS, and pnpm. Keep source in `src/`, unit tests beside source as `*.spec.ts`,
+Use TypeScript, NestJS, and pnpm. The implemented stack is PostgreSQL with pgvector accessed through
+Drizzle ORM (migrations in `drizzle/migrations/`), embeddings from a Text Embeddings Inference (TEI)
+service called through LangChain `OpenAIEmbeddings`, and RFC 9457-style Problem Details
+(`application/problem+json`) for every error response. Keep source in `src/`, unit tests beside source as `*.spec.ts`,
 and HTTP tests in `test/` as `*.e2e-spec.ts`. Follow repository Prettier and ESLint settings.
 
 ## Development Workflow
@@ -51,4 +54,4 @@ and receive review with the related change. Reviewers MUST check affected work a
 principles. Version amendments using semantic versioning: MAJOR for incompatible rule changes,
 MINOR for added or materially expanded rules, and PATCH for clarifications.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-21 | **Last Amended**: 2026-10-21
+**Version**: 1.1.1 | **Ratified**: 2026-10-21 | **Last Amended**: 2026-10-24

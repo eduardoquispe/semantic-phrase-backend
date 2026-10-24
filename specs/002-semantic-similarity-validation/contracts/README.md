@@ -22,7 +22,7 @@ Swagger, si se incorpora en otra tarea, debe seguir leyendo el YAML compartido a
 
 ## Reglas adicionales comprobables
 
-- Body obligatorio JSON con únicamente `text`; rechazar query desconocida. Los esquemas expresan forma y máximo; trim y `Cc` requieren validación de ejecución.
+- Body obligatorio JSON con únicamente `text`; los parámetros de query no declarados se ignoran. Los esquemas expresan forma y máximo; trim y `Cc` requieren validación de ejecución.
 - No autenticación, cabecera bearer ni token previo. El UUID temporal viaja en respuesta y luego se usará en el cuerpo del registro de otra funcionalidad.
 - Igualdad textual: candidata y score nulo, siempre confirmación. Vector: candidata y coseno incluso bajo umbral. Colección vacía: match nulo y sin confirmación.
 - `requiresConfirmation` vectorial usa comparación inclusiva con el umbral configurado. OpenAPI no prueba por sí solo esa regla dependiente de configuración.

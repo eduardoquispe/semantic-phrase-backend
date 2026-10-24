@@ -6,8 +6,8 @@
 
 ## Migración
 ```bash
-pnpm run db:generate   # produce drizzle/migrations/0002_*.sql (status, deleted_at)
-pnpm run db:migrate
+pnpm run db:migrate    # aplica drizzle/migrations/0002_*.sql (status, deleted_at); ya está generada y versionada.
+# pnpm run db:generate solo hace falta si cambias los *.model.ts
 ```
 
 ## Checks automáticos

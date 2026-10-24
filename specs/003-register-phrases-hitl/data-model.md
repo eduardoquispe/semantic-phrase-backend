@@ -49,7 +49,7 @@ No hay FK a la frase definitiva. La limpieza manual de una validación no afecta
 3. confirmed ausente equivale a false; presente exige booleano real. true solo satisface la confirmación, no las otras reglas.
 4. Original idéntico mediante igualdad estricta. Normalizar el texto recibido no permite cambiarlo.
 5. Modelo/versión deben coincidir con configuración activa. No verificar identidad remota ni repetir cómputo.
-6. Consumo nulo, vigencia estricta y confirmación cuando el booleano conservado lo exija. Comprobar el estado leído en aplicación antes de escribir.
+6. Consumo nulo, vigencia estricta y confirmación cuando el booleano conservado lo exija. Comprobar el estado leído en aplicación antes de escribir. Orden real: existencia, consumida, expirada, texto, modelo, confirmación.
 
 ## Transiciones
 
@@ -58,7 +58,7 @@ No hay FK a la frase definitiva. La limpieza manual de una validación no afecta
 | Pendiente vigente | Solicitud aplicable/autorizada | INSERT de frase seguido de UPDATE de consumedAt |
 | Pendiente vigente con alerta | confirmed omitido/false | 409 CONFIRMATION_REQUIRED; conserva fila |
 | Pendiente vigente | Texto distinto | 400 PHRASE_MISMATCH; conserva fila |
-| Pendiente vigente | Modelo incompatible | 500 INTERNAL_ERROR seguro; conserva fila |
+| Pendiente vigente | Modelo incompatible | 409 INCOMPATIBLE_MODEL; conserva fila |
 | Pendiente y now >= expiresAt | Registro | 409 VALIDATION_EXPIRED; conserva fila |
 | Consumida | Registro que lee consumo previo | 409 VALIDATION_ALREADY_USED; ninguna frase nueva |
 | Inexistente/eliminada | Registro | 400 INVALID_VALIDATION_ID |

@@ -11,9 +11,10 @@ paths:
       operationId: createPhrase
       summary: Registrar el original autorizado por una validación temporal
       description: |
-        Sin autenticación ni parámetros de consulta. Sin límite global de volumen.
+        Sin autenticación. No declara parámetros de consulta: los no declarados se ignoran.
+        Sin límite global de volumen.
         Comprobar referencia UUID v4 existente, texto original exacto, modelo/versión
-        compatibles, vigencia y consumo. Si requiresConfirmation almacenado es true,
+        compatibles (409 INCOMPATIBLE_MODEL si difieren), vigencia y consumo. Si requiresConfirmation almacenado es true,
         exigir confirmed=true. confirmed omitido equivale a false.
         Sin transacción ni compensación ni registro único concurrente. Si falla
         INSERT no se consume; si falla consumo, la frase permanece y se propaga el error.
@@ -49,11 +50,11 @@ paths:
                 data:
                   id: 123e4567-e89b-42d3-a456-426614174000
                   text: Me gusta viajar a Cusco
-                  createdAt: '2026-10-22T19:02:00Z'
+                  createdAt: '2026-10-22T19:02:00.000Z'
         '400':
           description: |
-            VALIDATION_ERROR para texto/confirmed inválidos, propiedades o query
-            desconocidas. INVALID_VALIDATION_ID para referencia ausente,
+            VALIDATION_ERROR para texto/confirmed inválidos o propiedades
+            desconocidas en el body. INVALID_VALIDATION_ID para referencia ausente,
             malformada o inexistente. PHRASE_MISMATCH para original distinto.
           content:
             application/problem+json:
@@ -68,7 +69,7 @@ paths:
                     code: VALIDATION_ERROR
                     errors:
                       - field: confirmed
-                        messages: [Debe ser un booleano real.]
+                        messages: [confirmed must be a boolean value]
                 invalidReference:
                   value:
                     title: Bad Request
@@ -79,10 +80,10 @@ paths:
                   value:
                     title: Bad Request
                     status: 400
-                    detail: El texto no coincide con el original validado.
+                    detail: El texto no corresponde a la validación.
                     code: PHRASE_MISMATCH
         '409':
-          description: Validación expirada, ya consumida o pendiente de confirmación
+          description: Validación expirada, ya consumida, pendiente de confirmación o de modelo/versión incompatible
           content:
             application/problem+json:
               schema:
@@ -104,10 +105,16 @@ paths:
                   value:
                     title: Conflict
                     status: 409
-                    detail: Debes confirmar el registro de esta coincidencia.
+                    detail: Se requiere confirmación explícita.
                     code: CONFIRMATION_REQUIRED
+                incompatibleModel:
+                  value:
+                    title: Conflict
+                    status: 409
+                    detail: La validación no es compatible con el modelo actual.
+                    code: INCOMPATIBLE_MODEL
         '500':
-          description: Fallo de BD, fallo inesperado o modelo/versión incompatible; mensaje seguro
+          description: Fallo de BD o fallo inesperado; mensaje seguro
           content:
             application/problem+json:
               schema:
@@ -203,6 +210,7 @@ components:
             - VALIDATION_EXPIRED
             - VALIDATION_ALREADY_USED
             - CONFIRMATION_REQUIRED
+            - INCOMPATIBLE_MODEL
             - INTERNAL_ERROR
             - DATABASE_ERROR
         errors:
@@ -226,7 +234,7 @@ components:
             status:
               const: 409
             code:
-              enum: [VALIDATION_EXPIRED, VALIDATION_ALREADY_USED, CONFIRMATION_REQUIRED]
+              enum: [VALIDATION_EXPIRED, VALIDATION_ALREADY_USED, CONFIRMATION_REQUIRED, INCOMPATIBLE_MODEL]
     InternalProblem:
       allOf:
         - $ref: '#/components/schemas/ProblemDetails'

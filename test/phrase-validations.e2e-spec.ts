@@ -176,9 +176,9 @@ describe('POST /api/v1/phrase-validations', () => {
     expect(generator.generate).not.toHaveBeenCalled();
     expect(saved).toHaveLength(0);
   });
-  it('rejects unknown query before inference', async () => {
-    await post({ text: 'Hola' }, '?extra=1').expect(400);
-    expect(generator.generate).not.toHaveBeenCalled();
+  it('ignores undeclared query parameters', async () => {
+    await post({ text: 'Hola' }, '?extra=1').expect(201);
+    expect(generator.generate).toHaveBeenCalledWith('Hola');
   });
   it.each(['!!!', '😀'.repeat(280), ` ${'a'.repeat(278)} `])(
     'accepts punctuation, astral and boundary originals',

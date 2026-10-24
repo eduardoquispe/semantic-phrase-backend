@@ -16,6 +16,7 @@ describe('registration error translation', () => {
   it.each([
     ['INVALID_VALIDATION_ID', 400],
     ['PHRASE_MISMATCH', 400],
+    ['INCOMPATIBLE_MODEL', 409],
     ['VALIDATION_EXPIRED', 409],
     ['VALIDATION_ALREADY_USED', 409],
     ['CONFIRMATION_REQUIRED', 409],

@@ -15,6 +15,7 @@ import { PhraseRepositoryPort } from '../src/modules/phrases/application/ports/o
 import { PhraseValidationRepositoryPort } from '../src/modules/phrases/application/ports/outbound/phrase-validation-repository.port';
 import { PhraseValidation } from '../src/modules/phrases/domain/entities/phrase-validation.entity';
 import { Phrase } from '../src/modules/phrases/domain/entities/phrase.entity';
+import type { PhraseValidationProps } from '../src/modules/phrases/domain/types/phrase-validation-props.interface';
 import { Embedding } from '../src/modules/phrases/domain/value-objects/embedding.value-object';
 import { PhraseModel } from '../src/modules/phrases/domain/value-objects/phrase-model.value-object';
 import { SimilarityScore } from '../src/modules/phrases/domain/value-objects/similarity-score.value-object';
@@ -30,6 +31,25 @@ interface ProblemBody {
   status: number;
   code: string;
   errors?: { field: string; messages: string[] }[];
+}
+
+function rebuild(
+  previous: PhraseValidation,
+  changes: Partial<PhraseValidationProps>,
+): PhraseValidation {
+  return new PhraseValidation({
+    id: new PhraseId(previous.id),
+    text: previous.text,
+    embedding: previous.embedding,
+    model: previous.model,
+    match: previous.match,
+    normalizedText: previous.normalizedText,
+    requiresConfirmation: previous.requiresConfirmation,
+    consumedAt: previous.consumedAt,
+    createdAt: previous.createdAt,
+    expiresAt: previous.expiresAt,
+    ...changes,
+  });
 }
 
 describe('phrase registration HTTP flow', () => {
@@ -91,22 +111,8 @@ describe('phrase registration HTTP flow', () => {
       return Promise.resolve();
     });
     validations.update.mockImplementation(
-      (id: string, changes: Partial<PhraseValidation>) => {
-        stored.set(
-          id,
-          new PhraseValidation({
-            ...stored.get(id)!,
-            ...changes,
-            id: new PhraseId(id),
-            match: changes.match ?? stored.get(id)!.match,
-            createdAt: changes.createdAt ?? stored.get(id)!.createdAt,
-            expiresAt: changes.expiresAt ?? stored.get(id)!.expiresAt,
-            consumedAt:
-              changes.consumedAt === undefined
-                ? stored.get(id)!.consumedAt
-                : changes.consumedAt,
-          }),
-        );
+      (id: string, changes: Partial<PhraseValidationProps>) => {
+        stored.set(id, rebuild(stored.get(id)!, changes));
         return Promise.resolve();
       },
     );
@@ -234,29 +240,21 @@ describe('phrase registration HTTP flow', () => {
     [
       'model',
       { model: new PhraseModel('other', model.version) },
-      500,
-      'INTERNAL_ERROR',
+      409,
+      'INCOMPATIBLE_MODEL',
     ],
     [
       'version',
       { model: new PhraseModel(model.id, 'other') },
-      500,
-      'INTERNAL_ERROR',
+      409,
+      'INCOMPATIBLE_MODEL',
     ],
   ] as const)(
     'rejects inapplicable %s without modifying state',
     async (_name, change, status, code) => {
       const validationId = await validate();
       const previous = stored.get(validationId)!;
-      const state = new PhraseValidation({
-        ...previous,
-        id: new PhraseId(previous.id),
-        match: null,
-        createdAt: previous.createdAt,
-        expiresAt: previous.expiresAt,
-        consumedAt: previous.consumedAt,
-        ...change,
-      });
+      const state = rebuild(previous, change);
       stored.set(validationId, state);
       expectProblem(
         await post({ text: ' Hola ', validationId, confirmed: true }).expect(
@@ -297,14 +295,10 @@ describe('phrase registration HTTP flow', () => {
     expect(stored.get(validationId)?.consumedAt).toBeNull();
     expect(phrases).toHaveLength(0);
   });
-  it('rejects unknown query', async () => {
+  it('ignores undeclared query parameters', async () => {
     const validationId = await validate();
-    expectProblem(
-      await post({ text: ' Hola ', validationId }, '?extra=1').expect(400),
-      400,
-      'VALIDATION_ERROR',
-    );
-    expect(stored.get(validationId)?.consumedAt).toBeNull();
+    await post({ text: ' Hola ', validationId }, '?extra=1').expect(201);
+    expect(stored.get(validationId)?.consumedAt).not.toBeNull();
   });
   it.each(['!!!', '😀'.repeat(280), ` ${'a'.repeat(278)} `])(
     'preserves admissible originals',

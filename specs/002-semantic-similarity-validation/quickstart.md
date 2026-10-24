@@ -1,7 +1,10 @@
 # Quickstart de validación — F002
 
 Implementación vigente: OpenAIEmbeddings directo contra TEI 1.9.4, con el adaptador
-mínimo indicado por el usuario. El registro histórico local se conserva separado.
+mínimo indicado por el usuario (`infrastructure/embeddings/huggin-face/`). El registro histórico local
+y el de JWT se conservan separados y no describen el comportamiento actual.
+
+Nota (implementación, 2026-10-24): `pnpm test` pasa con 28 suites y 318 pruebas, y `pnpm run test:e2e` con 4 suites y 115 pruebas (puertos simulados). Las cifras de las secciones fechadas más abajo son históricas. El 400 de validación usa `detail` «Los parámetros de la solicitud no son válidos.»; los parámetros de query no declarados se ignoran.
 Véanse [plan](plan.md) y [contrato TEI](contracts/embeddings-service.md).
 
 ## Preparación
@@ -70,7 +73,7 @@ curl -i http://localhost:3000/api/v1/phrase-validations \
 201 con data.validationId/expiresAt/requiresConfirmation/match. Empty: match null;
 textual: score null y confirmación; vector: una candidata incluso bajo umbral.
 No imprimir tokens en evidencia. 400 para entrada inválida; 503 para SDK; 500 DATABASE_ERROR para fallos de BD;
-500 para incompatible/SQL inesperado. Ninguna solicitud registra phrases.
+500 INTERNAL_ERROR para corpus incompatible sin igualdad textual o fallo inesperado. Ninguna solicitud registra phrases.
 
 Para integración, usar base temporal aislada, aplicar migraciones existentes y
 preparar fixtures TEI deliberados. Contrastar Top-1/desempates/filtro exacto con SQL,
@@ -96,6 +99,8 @@ No se repitieron las mediciones ni las pruebas SQL reales de la evidencia histó
 Se corrigió además la composición de la URL TEI para admitir una barra final sin duplicarla.
 
 ## Evidencia histórica anterior a la retirada de JWT
+
+> Histórico: las menciones de firma, `jose` y JWT de esta sección y de la tabla «Trazabilidad actual» describen la implementación previa; el código actual no firma nada ni usa `jose`.
 
 Estos resultados describen la implementación previa; no acreditan el contrato UUID actual.
 
@@ -155,8 +160,8 @@ PASS reales:
   por UUID ASC y score exactamente igual a SQL. Otra versión con vector perfecto
   queda excluida. Las consultas siguen siendo secuenciales sin snapshot común.
 - Lectura F001 de un texto histórico de 500 puntos de código.
-- Cada 201 conserva original, vector(384), modelo/versión configurados, consumed_at
-  null y JWT HS256/typ JWT/purpose mínimo verificado criptográficamente. Fechas
+- Cada 201 conservaba original, vector(384), modelo/versión configurados, consumed_at
+  null y (en esa implementación previa, ya retirada) un JWT HS256/typ JWT/purpose mínimo verificado criptográficamente. Fechas
   de fila, iat/exp y respuesta coinciden a segundos. Revalidar no consume/renueva.
 - Conteo de phrases intacto en cada solicitud. Al final del corpus de pruebas:
   3 frases preparadas deliberadamente y 6 validaciones temporales, todas eliminadas
@@ -255,7 +260,7 @@ No hay argumentos ni variables de prompt predeterminado en el contenedor.
 
 Perfil observado:
 
-- Imagen declarada: `ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-1.9`.
+- Imagen declarada entonces: `…:cpu-arm64-1.9` (el `compose.yaml` actual fija `cpu-arm64-1.9.4`).
 - Imagen efectiva: `sha256:798cd7615e060a72ccbdf19aa0ada52289c6a0147490195bafaece6ce04d70f1`.
 - `/info.version`: `1.9.4`; `/info.sha`: `e80ef225ed0e6cb1717ce632a6a84b6cf211bb67`.
 - `/info.model_id`: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
